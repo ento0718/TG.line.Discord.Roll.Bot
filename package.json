@@ -1,3 +1,7 @@
+"scripts": {
+    "start": "node run app.js"
+},
+
 {
   "name": "hktrpg",
   "version": "1.32.0",
