@@ -1,14 +1,15 @@
 'use strict';
-if (!process.env.LINE_CHANNEL_ACCESSTOKEN) {
+if (!process.env.LINE_CHANNEL_ACCESSTOKEN || !process.env.LINE_CHANNEL_SECRET) {
 	return;
 }
-const port = 20831;
-const mainLine = (process.env.DISCORD_CHANNEL_SECRET) ? false : true;
-const lineAgenda = (process.env.LINE_AGENDA) ? true : false;
+const port = process.env.LINEPORT || 20831;
+const candle = require('../modules/candleDays.js');
+const mainLine = Boolean(process.env.DISCORD_CHANNEL_SECRET);
+const lineAgenda = Boolean(process.env.LINE_AGENDA)
 exports.analytics = require('./analytics');
 const EXPUP = require('./level').EXPUP || function () { };
 const line = require('@line/bot-sdk');
-const express = require('express');
+
 const MESSAGE_SPLITOR = (/\S+/ig);
 const SIX_MONTH = 30 * 24 * 60 * 60 * 1000 * 6;
 const agenda = require('../modules/schedule');
@@ -19,7 +20,7 @@ const config = {
 	channelAccessToken: process.env.LINE_CHANNEL_ACCESSTOKEN,
 	channelSecret: process.env.LINE_CHANNEL_SECRET,
 };
-var TargetGM = (process.env.mongoURL) ? require('../roll/z_DDR_darkRollingToGM').initialize() : '';
+const TargetGM = (process.env.mongoURL) ? require('../roll/z_DDR_darkRollingToGM').initialize() : '';
 const courtMessage = require('./logs').courtMessage || function () { };
 // create LINE SDK client
 const channelKeyword = process.env.DISCORD_CHANNEL_KEYWORD || "";
@@ -27,7 +28,7 @@ const client = new line.Client(config);
 const newMessage = require('./message');
 // create Express app
 // about Express itself: https://expressjs.com/
-const app = express();
+const app = require('./core-www.js').app;
 
 // register a webhook handler with middleware
 // about the middleware, please refer to doc
@@ -47,7 +48,7 @@ process.on("Line", message => {
 	return;
 });
 
-var handleEvent = async function (event) {
+let handleEvent = async function (event) {
 
 	let inputStr = (event.message && event.message.text) ? event.message.text : "";
 
@@ -256,6 +257,7 @@ var handleEvent = async function (event) {
 			if (displayname && rplyVal && rplyVal.type != 'image') {
 				//285083923223
 				displayname = "@" + displayname;
+				displayname += (candle.checker()) ? ' ' + candle.checker() : '';
 				displayname += (rplyVal.statue) ? ' ' + rplyVal.statue + '\n' : "\n";
 				rplyVal.text = displayname + rplyVal.text;
 			}
@@ -286,7 +288,7 @@ var handleEvent = async function (event) {
 	//Reply Max: 2000 characters
 
 }
-var replyMessagebyReplyToken = function (event, Reply) {
+let replyMessagebyReplyToken = function (event, Reply) {
 	let temp = HandleMessage(Reply);
 	return client.replyMessage(event.replyToken, temp).catch(() => {
 		if (temp.type == 'image') {
@@ -476,7 +478,3 @@ function z_stop(mainMsg, groupid) {
 		return false;
 }
 
-module.exports = {
-	app,
-	express
-};

@@ -2,7 +2,7 @@
 if (!process.env.mongoURL) {
     return;
 }
-var variables = {};
+let variables = {};
 const mathjs = require('mathjs');
 const rollDice = require('./rollbase').rollDiceCommand;
 const schema = require('../modules/schema.js');
@@ -47,7 +47,7 @@ const getHelpMessage = async function () {
 
 簡單新增角色卡 .char add name[Sad]~ state[HP:15/15;]~ roll[鬥毆: cc 50;]~ notes[筆記:這是測試,請試試在群組輸入 .char use Sad;]~ 
 新增了角色卡後，可以輸入 .admin account (username) (password) 
-然後在網頁: https://www.hktrpg.com:20721/card/ 中直接進行修改
+然後在網頁: https://card.hktrpg.com/ 中直接進行修改
 
 把結果傳送到已登記的Discord，TG，LINE上的聊天群組的登記方法: 
 由該群組的Admin授權允許 輸入 .admin allowrolling  
@@ -143,7 +143,7 @@ const rollDiceCommand = async function ({
                 return rply;
             }
 
-            rply.text = '修改成功\n現在角色卡: ' + doc.name + ' 已經公開。\n請到以下網址查看\n https://www.hktrpg.com:20721/publiccard/ ';
+            rply.text = '修改成功\n現在角色卡: ' + doc.name + ' 已經公開。\n請到以下網址查看\n https://publiccard.hktrpg.com/ ';
             return rply;
         case /(^[.]char$)/i.test(mainMsg[0]) && /^unpublic+/i.test(mainMsg[1]):
             if (!mainMsg[2]) {
@@ -169,7 +169,7 @@ const rollDiceCommand = async function ({
                 return rply;
             }
 
-            rply.text = '修改成功\n現在角色卡: ' + doc.name + ' 已經不公開。\n請到以下網址查看\n https://www.hktrpg.com:20721/publiccard/ ';
+            rply.text = '修改成功\n現在角色卡: ' + doc.name + ' 已經不公開。\n請到以下網址查看\n https://publiccard.hktrpg.com/ ';
             return rply;
         case /(^[.]char$)/i.test(mainMsg[0]) && /^show\d+/i.test(mainMsg[1]):
             filter = {
@@ -212,7 +212,7 @@ const rollDiceCommand = async function ({
         case /(^[.]char$)/i.test(mainMsg[0]) && /^add$/i.test(mainMsg[1]) && /^\S+$/.test(mainMsg[2]): {
             Card = await analysicInputCharacterCard(inputStr); //分析輸入的資料
             if (!Card.name) {
-                rply.text = '沒有輸入角色咭名字，請重新整理內容 格式為 \n.char add name[XXXX]~ \nstate[HP:15/15;MP:6/6;]~\nroll[投擲:cc 80 投擲;鬥毆:cc 40 鬥毆;]~\nnotes[心靈支柱: 無;notes:這是測試,請試試在群組輸入 .char use Sad;]~\n'
+                rply.text = '沒有輸入角色咭名字，請重新整理內容 格式為 \n.char add name[Sad]~ \nstate[HP:15/15;MP:6/6;]~\nroll[投擲:cc 80 投擲;鬥毆:cc 40 鬥毆;]~\nnotes[心靈支柱: 無;notes:這是測試,請試試在群組輸入 .char use Sad;]~\n'
                 return rply;
             }
             /*
@@ -260,7 +260,7 @@ const rollDiceCommand = async function ({
         case /(^[.]char$)/i.test(mainMsg[0]) && /^edit$/i.test(mainMsg[1]) && /^\S+$/.test(mainMsg[2]):
             Card = await analysicInputCharacterCard(inputStr); //分析輸入的資料
             if (!Card.name) {
-                rply.text = '沒有輸入角色咭名字，請重新整理內容 格式為 .char edit name[XXXX]~ \nstate[HP:15/15;MP:6/6;]~\nroll[投擲:cc 80 投擲;鬥毆:cc 40 鬥毆;]~\nnotes[心靈支柱: 無;notes:這是測試,請試試在群組輸入 .char use Sad;]~\n'
+                rply.text = '沒有輸入角色咭名字，請重新整理內容 格式為 .char edit name[Sad]~ \nstate[HP:15/15;MP:6/6;]~\nroll[投擲:cc 80 投擲;鬥毆:cc 40 鬥毆;]~\nnotes[心靈支柱: 無;notes:這是測試,請試試在群組輸入 .char use Sad;]~\n'
                 return rply;
             }
             /*
@@ -637,13 +637,13 @@ async function mainCharacter(doc, mainMsg) {
                     last = 'state';
                     await findState.push(resutltState);
                 } else
-                    if (mainMsg[name].match(/^[+-/*]\S+d\S/i) && last == 'state') {
+                    if (mainMsg[name].match(/^[+-/*]\d+/i) && last == 'state') {
                         last = '';
                         let res = mainMsg[name].charAt(0)
                         let number = await countNum(mainMsg[name].substring(1));
                         number ? await findState.push(res + number) : null;
                     } else
-                        if (mainMsg[name].match(/^[0-9+\-*/.]\S+$/i) && last == 'state') {
+                        if (mainMsg[name].match(/^\d+$/i) && last == 'state') {
                             last = '';
                             await findState.push(mainMsg[name]);
                         } else {

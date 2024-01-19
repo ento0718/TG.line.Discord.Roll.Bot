@@ -1,11 +1,11 @@
 "use strict";
 //heroku labs:enable runtime-dyno-metadata -a <app name>
-var chineseConv = require('chinese-conv'); //繁簡轉換
+let chineseConv = require('chinese-conv'); //繁簡轉換
 const duckImage = require("@zetetic/duckduckgo-images-api")
 const wiki = require('wikijs').default;
 const rollbase = require('./rollbase.js');
-const translate = require('@vitalets/google-translate-api');
-var variables = {};
+const translate = require('@vitalets/google-translate-api').translate;
+let variables = {};
 const schema = require('../modules/schema.js');
 const VIP = require('../modules/veryImportantPerson');
 const translateChannel = require('../modules/translate');
@@ -41,10 +41,6 @@ EG: .wiki BATMAN
 即時翻譯功能	： .tran (內容)  
 預設翻譯成正體中文 
 EG: .tran BATMAN 
-
-VIP功能:同步式頻道傳譯功能
-.translate on
-.translate off
 
 可翻譯成其他語言 ： .tran.(語系) (內容)
 EG: .tran.ja BATMAN  .tran.日 BATMAN

@@ -1,49 +1,59 @@
 "use strict";
-if (!process.env.mongoURL) return;
-const master = require.main?.filename.includes('index');
+
+// Requirements
 const mongoose = require('mongoose');
-/* mongoose.connect(process.env.mongoURL, {
-        useNewUrlParser: true,
-        useFindAndModify: false,
-        useUnifiedTopology: true
-    });
-*/
+const cachegoose = require('recachegoose');
+const schedule = require('node-schedule');
 
-(async () => {
+// Config
+const mongoUrl = process.env.mongoURL;
+if (!mongoUrl) return;
+
+const restartTime = '30 04 */3 * *';
+const master = require.main?.filename.includes('index');
+
+// MongoDB Connection
+mongoose.set('strictQuery', false);
+cachegoose(mongoose, {
+    engine: 'memory'
+});
+
+async function connect() {
     try {
-        await mongoose.connect(process.env.mongoURL, {
-            //    useNewUrlParser: true,
-            //  useFindAndModify: false,
-            //   useUnifiedTopology: true,
-            socketTimeoutMS: 15000,
-            //serverSelectionTimeoutMS: 5000,
-
+        await mongoose.connect(mongoUrl, {
+            connectTimeoutMS: 1000 * 60 * 2,
+            socketTimeoutMS: 1000 * 60 * 2
         });
-    } catch (err) {
-        console.error('DB CONNECT GET ERROR: ' + err.name, err.reason)
+        console.log('Connected to MongoDB');
+    } catch (error) {
+        console.error('MongoDB Connection Error:', error);
     }
+}
+
+// Connect on start
+(async () => {
+    await connect();
 })();
 
-
-mongoose.connection.on('error', err => {
-    console.error('DB CONNECT ON GET ERROR: ' + err.name, err.reason)
+// Reconnect cron job
+const restartMongo = schedule.scheduleJob(restartTime, async () => {
+    console.log(`${restartTime}: Reconnecting MongoDB...`);
+    await restart();
 });
 
-const db = mongoose.connection;
+async function restart() {
+    console.log('Restarting MongoDB...');
+    await mongoose.connection.close();
+    await connect();
+}
 
-db.on('error', console.error.bind('mlab connection error:', console));
-db.once('open', function () {
-    console.log('mlab  connected!');
-    if (!master) return;
-    require('fs').readdirSync(__dirname).forEach(function (file) {
-        if (file.match(/\.js$/) && file.match(/^core-/)) {
-            var name = file.replace('.js', '');
-            exports[name] = require('./' + file);
-        }
-    });
-
+// Handle connection errors
+mongoose.connection.on('error', async (error) => {
+    console.error('MongoDB Connection Error:', error);
+    await restart();
 });
 
+// Export mongoose
 module.exports = {
     mongoose
 };

@@ -1,16 +1,13 @@
 "use strict";
 
-require('dotenv').config();
-if (process.env.mongoURL) {
-  require('./modules/db-connector');
-  return;
-}
+require('dotenv').config({ override: true });
+const fs = require('fs');
 
 
 
-require('fs').readdirSync(__dirname + '/modules/').forEach(function (file) {
+fs.readdirSync(__dirname + '/modules/').forEach(function (file) {
   if (file.match(/\.js$/) && file.match(/^core-/)) {
-    var name = file.replace('.js', '');
+    let name = file.replace('.js', '');
     exports[name] = require('./modules/' + file);
   }
 });
@@ -19,6 +16,12 @@ process.on('warning', (warning) => {
   console.warn('warning', warning.name); // Print the warning name
   console.warn('warning', warning.message); // Print the warning message
   console.warn('warning', warning.stack); // Print the stack trace
+});
+
+process.stdout.on('error', function (err) {
+  if (err.code == "EPIPE") {
+    console.log('EPIPE err:', err);
+  }
 });
 /*
 流程解釋

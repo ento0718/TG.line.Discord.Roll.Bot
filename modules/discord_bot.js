@@ -1,44 +1,67 @@
 "use strict";
 exports.analytics = require('./analytics');
+const debugMode = !!process.env.DEBUG;
 const schema = require('../modules/schema.js');
+const isImageURL = require('image-url-validator').default;
+const imageUrl = (/(http(s?):)([/|.|\w|\s|-])*\.(?:jpg|gif|png)(\s?)$/igm);
 const channelSecret = process.env.DISCORD_CHANNEL_SECRET;
 const adminSecret = process.env.ADMIN_SECRET || '';
-const Cluster = require('discord-hybrid-sharding');
-const Discord = require("discord.js-light");
+const candle = require('../modules/candleDays.js');
+const { ClusterClient, getInfo } = require('discord-hybrid-sharding');
+const Discord = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Options } = Discord;
+const { Collection, ActionRowBuilder, ButtonBuilder, ButtonStyle, Events, EmbedBuilder, PermissionsBitField, AttachmentBuilder, ChannelType } = Discord;
+
 const multiServer = require('../modules/multi-server')
 const checkMongodb = require('../modules/dbWatchdog.js');
 const fs = require('node:fs');
 const errorCount = [];
-const { Client, Intents, Permissions, Collection, MessageActionRow, MessageButton, WebhookClient, MessageAttachment } = Discord;
-const rollText = require('./getRoll').rollText;
+const { rollText } = require('./getRoll');
 const agenda = require('../modules/schedule') && require('../modules/schedule').agenda;
 exports.z_stop = require('../roll/z_stop');
-const buttonStyles = ['DANGER', 'PRIMARY', 'SECONDARY', 'SUCCESS', 'DANGER']
+const buttonStyles = [ButtonStyle.Danger, ButtonStyle.Primary, ButtonStyle.Secondary, ButtonStyle.Success, ButtonStyle.Danger]
 const SIX_MONTH = 30 * 24 * 60 * 60 * 1000 * 6;
-function channelFilter(channel) {
-	return !channel.lastMessageId || Discord.SnowflakeUtil.deconstruct(channel.lastMessageId).timestamp < Date.now() - 3600000;
-}
-const client = new Discord.Client({
-	makeCache: Discord.Options.cacheWithLimits({
+const channelFilter = channel => !channel.lastMessageId || Discord.SnowflakeUtil.deconstruct(channel.lastMessageId).timestamp < Date.now() - 36000;
+const client = new Client({
+	sweepers: {
+		...Options.DefaultSweeperSettings,
+		messages: {
+			interval: 1800, // Every hour...
+			lifetime: 900,	// Remove messages older than 30 minutes.
+		},
+		users: {
+			interval: 1800, // Every hour...
+			lifetime: 900,	// Remove messages older than 30 minutes.
+			filter: () => null,
+		},
+		threads: {
+			interval: 1800, // Every hour...
+			lifetime: 900,	// Remove messages older than 30 minutes.
+		}
+	},
+	makeCache: Options.cacheWithLimits({
 		ApplicationCommandManager: 0, // guild.commands
 		BaseGuildEmojiManager: 0, // guild.emojis
 		GuildBanManager: 0, // guild.bans
 		GuildInviteManager: 0, // guild.invites
-		GuildMemberManager: 0, // guild.members
+		GuildMemberManager: {
+			maxSize: 200,
+			keepOverLimit: (member) => member.id === client.user.id,
+		}, // guild.members
 		GuildStickerManager: 0, // guild.stickers
-		MessageManager: Infinity, // channel.messages
-		PermissionOverwriteManager: Infinity, // channel.permissionOverwrites
+		MessageManager: 200, // channel.messages
+		//PermissionOverwriteManager: 200, // channel.permissionOverwrites
 		PresenceManager: 0, // guild.presences
 		ReactionManager: 0, // message.reactions
 		ReactionUserManager: 0, // reaction.users
 		StageInstanceManager: 0, // guild.stageInstances
 		ThreadManager: 0, // channel.threads
 		ThreadMemberManager: 0, // threadchannel.members
-		UserManager: Infinity, // client.users
+		UserManager: 200, // client.users
 		VoiceStateManager: 0,// guild.voiceStates
 
-		GuildManager: Infinity, // roles require guilds
-		RoleManager: Infinity, // cache all roles
+		//GuildManager: 200, // roles require guilds
+		//RoleManager: 200, // cache all roles
 		PermissionOverwrites: 0, // cache all PermissionOverwrites. It only costs memory if the channel it belongs to is cached
 		ChannelManager: {
 			maxSize: Infinity, // prevent automatic caching
@@ -51,8 +74,8 @@ const client = new Discord.Client({
 			sweepInterval: 3600
 		},
 	}),
-	shards: Cluster.data.SHARD_LIST, // An array of shards that will get spawned
-	shardCount: Cluster.data.TOTAL_SHARDS, // Total number of shards
+	shards: getInfo().SHARD_LIST,  // An array of shards that will get spawned
+	shardCount: getInfo().TOTAL_SHARDS, // Total number of shards
 	restRequestTimeout: 45000, // Timeout for REST requests
 	/**
 		  cacheGuilds: true,
@@ -62,50 +85,55 @@ const client = new Discord.Client({
 		cacheEmojis: false,
 		cachePresences: false
 	 */
-	intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES, Intents.FLAGS.GUILD_MESSAGE_REACTIONS, Intents.FLAGS.DIRECT_MESSAGES, Intents.FLAGS.DIRECT_MESSAGE_REACTIONS], partials: ['MESSAGE', 'CHANNEL', 'REACTION'],
+	intents: [GatewayIntentBits.Guilds,
+	GatewayIntentBits.GuildMessages, GatewayIntentBits.DirectMessages,
+	GatewayIntentBits.GuildMessageReactions,
+	GatewayIntentBits.MessageContent], partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
-client.cluster = new Cluster.Client(client);
+client.cluster = new ClusterClient(client);
 client.login(channelSecret);
 const MESSAGE_SPLITOR = (/\S+/ig);
 const link = process.env.WEB_LINK;
 const port = process.env.PORT || 20721;
 const mongo = process.env.mongoURL
-var TargetGM = (process.env.mongoURL) ? require('../roll/z_DDR_darkRollingToGM').initialize() : '';
+let TargetGM = (process.env.mongoURL) ? require('../roll/z_DDR_darkRollingToGM').initialize() : '';
 const EXPUP = require('./level').EXPUP || function () { };
 const courtMessage = require('./logs').courtMessage || function () { };
 
 const newMessage = require('./message');
 
 const RECONNECT_INTERVAL = 1 * 1000 * 60;
-const shardids = client.cluster.id;
+const shardid = client.cluster.id;
 const WebSocket = require('ws');
-var ws;
+let ws;
 
 client.on('messageCreate', async message => {
 	try {
 		if (message.author.bot) return;
+		if (!checkMongodb.isDbOnline() && checkMongodb.isDbRespawn()) {
+			//checkMongodb.discordClientRespawn(client, shardid)
+			respawnCluster2();
+		}
 		const result = await handlingResponMessage(message);
 		await handlingMultiServerMessage(message);
 		if (result && result.text)
 			return handlingSendMessage(result);
 		return;
 	} catch (error) {
-		console.error('discord bot messageCreate #91 error', error);
+		console.error('discord bot messageCreate #91 error', error, (error && error.name && error.message) & error.stack);
 	}
 
 });
 client.on('guildCreate', async guild => {
 	try {
-
-
 		const channels = await guild.channels.fetch();
 		const keys = Array.from(channels.values());
 		const channel = keys.find(channel => {
-			return channel.type === 'GUILD_TEXT' && channel.permissionsFor(guild.me).has('SEND_MESSAGES')
+			return channel.type === ChannelType.GuildText && channel.permissionsFor(guild.members.me).has(PermissionsBitField.Flags.SendMessages)
 		});
 		if (!channel) return;
 		//	let channelSend = await guild.channels.fetch(channel.id);
-		const text = new Discord.MessageEmbed()
+		const text = new EmbedBuilder()
 			.setColor('#0099ff')
 			//.setTitle(rplyVal.title)
 			//.setURL('https://discord.js.org/')
@@ -115,7 +143,7 @@ client.on('guildCreate', async guild => {
 	} catch (error) {
 		if (error.message === 'Missing Access') return;
 		if (error.message === 'Missing Permissions') return;
-		console.error('discord bot guildCreate  #114 error', error);
+		console.error('discord bot guildCreate  #114 error', (error && error.name), (error && error.message), (error && error.reson));
 	}
 })
 
@@ -124,7 +152,7 @@ client.on('interactionCreate', async message => {
 		if (message.user && message.user.bot) return;
 		return __handlingInteractionMessage(message);
 	} catch (error) {
-		console.error('discord bot interactionCreate #123 error', error)
+		console.error('discord bot interactionCreate #123 error', (error && error.name), (error && error.message), (error && error.reson));
 	}
 });
 
@@ -132,10 +160,12 @@ client.on('interactionCreate', async message => {
 client.on('messageReactionAdd', async (reaction, user) => {
 	if (!checkMongodb.isDbOnline()) return;
 	if (reaction.me) return;
-	const list = await schema.roleReact.findOne({ messageID: reaction.message.id, groupid: reaction.message.guildId }).catch(error => {
-		console.error('discord_bot #802 mongoDB error: ', error.name, error.reson)
-		checkMongodb.dbErrOccurs();
-	})
+	const list = await schema.roleReact.findOne({ messageID: reaction.message.id, groupid: reaction.message.guildId })
+		.cache(30)
+		.catch(error => {
+			console.error('discord_bot #802 mongoDB error: ', error.name, error.reson)
+			checkMongodb.dbErrOccurs();
+		})
 	try {
 		if (!list || list.length === 0) return;
 		const detail = list.detail;
@@ -149,7 +179,7 @@ client.on('messageReactionAdd', async (reaction, user) => {
 			reaction.users.remove(user.id);
 		}
 	} catch (error) {
-		console.error('Discord bot messageReactionAdd #249 ', error)
+		console.error('Discord bot messageReactionAdd #249 ', (error && error.name), (error && error.message), (error && error.reson))
 	}
 
 });
@@ -169,36 +199,63 @@ client.on('messageReactionRemove', async (reaction, user) => {
 		}
 	} catch (error) {
 		if (error.message === 'Unknown Member') return;
-		console.error('Discord bot messageReactionRemove #268 ', error)
+		console.error('Discord bot messageReactionRemove #268 ', (error && error.name), (error && error.message), (error && error.reson))
 	}
 });
+
+const sleep = async (minutes) => {
+	await new Promise(resolve => {
+		return setTimeout(resolve, minutes * 1000 * 60);
+	});
+};
 
 
 client.once('ready', async () => {
 	initInteractionCommands();
 	if (process.env.BROADCAST) connect();
-	//	if (shardids === 0) getSchedule();
-});
-
-client.on('ready', async () => {
-	client.user.setActivity('🌼bothelp | hktrpg.com🍎');
+	//	if (shardid === 0) getSchedule();
+	client.user.setActivity(`${candle.checker() || '🌼'}bothelp | hktrpg.com🍎`);
 	console.log(`Discord: Logged in as ${client.user.tag}!`);
-	var switchSetActivity = 0;
+	let switchSetActivity = 0;
 	// eslint-disable-next-line no-unused-vars
-	const refreshId = setInterval(async () => {
-		if (shardids !== (Cluster.data.TOTAL_SHARDS - 1)) return;
-		if (adminSecret) {
-			let check = await checkWakeUp();
-			if (!check) {
-				SendToId(adminSecret, 'HKTRPG可能下線了');
-			}
+	//await sleep(6);
+	const HEARTBEAT_CHECK_INTERVAL = 1000 * 60;
+	const WARNING_THRESHOLD = 3;
+	const CRITICAL_THRESHOLD = 5;
+	const restartServer = () => {
+		require('child_process').exec('sudo reboot');
+	}
+	let heartbeat = 0;
+	console.log('Discord Heartbeat: Ready...')
+	setInterval(async () => {
+		const isAwake = await checkWakeUp();
+		if (isAwake) {
+			heartbeat = 0;
+			return;
 		}
-	}, 180000);
+		if (!isAwake || isAwake.length > 0) {
+			heartbeat++;
+			console.log(`Discord Heartbeat: ID: ${isAwake.length} - ${heartbeat}... `)
+		}
+		if (heartbeat > WARNING_THRESHOLD && adminSecret) {
+			SendToId(adminSecret, `HKTRPG ID: ${wakeup.join(', ')} 可能下線了 請盡快檢查.`);
+		}
+		if (heartbeat > CRITICAL_THRESHOLD) {
+			if (isAwake.length > 0)
+				for (let i = 0; i < isAwake.length; i++)
+					client.cluster.evalOnManager(`this.clusters.get(${isAwake[i]}).respawn({ delay: 7000, timeout: -1 })`, { timeout: 10000 });
+		}
+
+		if (heartbeat > 20) {
+			restartServer();
+		}
+
+	}, HEARTBEAT_CHECK_INTERVAL);
 	// eslint-disable-next-line no-unused-vars
 	const refreshId2 = setInterval(async () => {
 		switch (switchSetActivity % 2) {
 			case 1:
-				client.user.setActivity('🌼bothelp | hktrpg.com🍎');
+				client.user.setActivity(`${candle.checker() || '🌼'}bothelp | hktrpg.com🍎`);
 				break;
 			default:
 				client.user.setActivity(await count2());
@@ -208,8 +265,9 @@ client.on('ready', async () => {
 	}, 180000);
 });
 
+
 async function replilyMessage(message, result) {
-	const displayname = (message.member && message.member.id) ? `<@${message.member.id}>\n` : '';
+	const displayname = (message.member && message.member.id) ? `<@${message.member.id}>${candle.checker()}\n` : '';
 	if (result && result.text) {
 		result.text = `${displayname}${result.text}`
 		await __handlingReplyMessage(message, result);
@@ -260,15 +318,31 @@ function checkRepeatName(content, button, user) {
 	}
 	return flag;
 }
-function convQuotes(text = "") {
-	//const imageMatch = text.match(imageUrl);
-	return new Discord.MessageEmbed()
+async function convQuotes(text = "") {
+	let embeds = []
+	let embed = new EmbedBuilder()
 		.setColor('#0099ff')
 		//.setTitle(rplyVal.title)
 		//.setURL('https://discord.js.org/')
 		.setAuthor({ name: 'HKTRPG', url: 'https://www.patreon.com/HKTRPG', iconURL: 'https://user-images.githubusercontent.com/23254376/113255717-bd47a300-92fa-11eb-90f2-7ebd00cd372f.png' })
-		.setDescription(text)
-	//.setImage((imageMatch && imageMatch.length > 0) ? imageMatch[0] : '')
+	const imageMatch = text.match(imageUrl) || null;
+	if (imageMatch && imageMatch.length) {
+		for (let index = 0; (index < imageMatch.length) && index < 10; index++) {
+			imageMatch[index] = imageMatch[index].replace(/\s?$/, '');
+			let imageVaild = await isImageURL(imageMatch[index]);
+			if (imageVaild) {
+				let imageEmbed = new EmbedBuilder().setURL('https://www.patreon.com/HKTRPG').setImage(imageMatch[index]);
+				if (imageMatch.length === 1) embed.setImage(imageMatch[index]);
+				else embeds.push(imageEmbed);
+				text = text.replace(imageMatch[index], '')
+			}
+
+		}
+	}
+	embed.setDescription(text)
+	embeds.unshift(embed);
+	return embeds;
+
 }
 
 async function privateMsgFinder(channelid) {
@@ -288,7 +362,7 @@ async function SendToId(targetid, replyText, quotes) {
 			if (i == 0 || i == 1 || i == sendText.length - 1 || i == sendText.length - 2)
 				try {
 					if (quotes) {
-						user.send({ embeds: [convQuotes(sendText[i])] });
+						user.send({ embeds: await convQuotes(sendText[i]) });
 					} else { user.send(sendText[i]); }
 				}
 				catch (e) {
@@ -302,19 +376,19 @@ async function SendToId(targetid, replyText, quotes) {
 
 }
 
-function SendToReply({ replyText = "", message, quotes = false }) {
+async function SendToReply({ replyText = "", message, quotes = false }) {
 	let sendText = replyText.toString().match(/[\s\S]{1,2000}/g);
 	for (let i = 0; i < sendText.length; i++) {
 		if (i == 0 || i == 1 || i == sendText.length - 1 || i == sendText.length - 2)
 			try {
 				if (quotes) {
-					message.author && message.author.send({ embeds: [convQuotes(sendText[i])] });
+					message.author && message.author.send({ embeds: await convQuotes(sendText[i]) });
 				} else
 					message.author && message.author.send(sendText[i]);
 			}
 			catch (e) {
 				if (e.message !== 'Cannot send messages to this user') {
-					console.error('Discord  GET ERROR:  SendToReply: ', e.message, 'e', e, message, replyText)
+					console.error('Discord  GET ERROR:  SendToReply: ', e.message, 'e', message, replyText)
 				}
 			}
 	}
@@ -331,8 +405,12 @@ async function SendToReplychannel({ replyText = "", channelid = "", quotes = fal
 		null
 	}
 	if (!channel && groupid) {
-		let guild = await client.guilds.fetch(groupid)
-		channel = await guild.channels.fetch(channelid)
+		try {
+			let guild = await client.guilds.fetch(groupid)
+			channel = await guild.channels.fetch(channelid)
+		} catch (error) {
+			null
+		}
 	}
 	if (!channel) return;
 	//	console.error(`discord bot cant find channel #443 ${replyText}`)
@@ -342,7 +420,7 @@ async function SendToReplychannel({ replyText = "", channelid = "", quotes = fal
 			try {
 				if (quotes) {
 					for (let index = 0; index < buttonCreate.length || index === 0; index++) {
-						channel.send({ embeds: [convQuotes(sendText[i])], components: buttonCreate[index] || null });
+						channel.send({ embeds: await convQuotes(sendText[i]), components: buttonCreate[index] || null });
 					}
 
 				} else {
@@ -354,7 +432,7 @@ async function SendToReplychannel({ replyText = "", channelid = "", quotes = fal
 			}
 			catch (e) {
 				if (e.message !== 'Missing Permissions') {
-					console.error('Discord  GET ERROR: SendToReplychannel: ', e.message, replyText, channelid);
+					console.error('Discord  GET ERROR: SendToReplychannel: ', e, replyText, channelid);
 				}
 			}
 
@@ -364,7 +442,7 @@ async function SendToReplychannel({ replyText = "", channelid = "", quotes = fal
 
 
 async function nonDice(message) {
-	await courtMessage({ result: "", botname: "Discord", inputStr: "", shardids: shardids })
+	await courtMessage({ result: "", botname: "Discord", inputStr: "", shardids: shardid })
 	const groupid = (message.guild && message.guild.id) || '';
 	const userid = (message.author && message.author.id) || (message.user && message.user.id) || '';
 	if (!groupid || !userid) return;
@@ -374,11 +452,11 @@ async function nonDice(message) {
 		let LevelUp = await EXPUP(groupid, userid, displayname, "", membercount, "", message);
 		if (groupid && LevelUp && LevelUp.text) {
 			await SendToReplychannel(
-				{ replyText: `@${displayname}  ${(LevelUp && LevelUp.statue) ? LevelUp.statue : ''}\n${LevelUp.text}`, channelid: message.channel.id }
+				{ replyText: `@${displayname} ${candle.checker()} ${(LevelUp && LevelUp.statue) ? LevelUp.statue : ''}\n${LevelUp.text}`, channelid: message.channel.id }
 			);
 		}
 	} catch (error) {
-		console.error('await #534 EXPUP error', error);
+		console.error('await #534 EXPUP error', (error && error.name), (error && error.message), (error && error.reson));
 	}
 	return null;
 }
@@ -412,7 +490,6 @@ async function count() {
 		client.cluster
 			.broadcastEval(c => c.guilds.cache.filter((guild) => guild.available).reduce((acc, guild) => acc + guild.memberCount, 0))
 	];
-
 	return Promise.all(promises)
 		.then(results => {
 			const totalGuilds = results[0].reduce((acc, guildCount) => acc + guildCount, 0);
@@ -452,13 +529,14 @@ process.on('unhandledRejection', error => {
 	if (error.message === "Unknown Channel") return;
 	if (error.message === "Missing Access") return;
 	if (error.message === "Missing Permissions") return;
+	if (error.message && error.message.includes('Unknown interaction')) return;
 	if (error.message && error.message.includes('INTERACTION_NOT_REPLIED')) return;
 	if (error.message && error.message.includes("Invalid Form Body")) return;
 	// Invalid Form Body
 	// user_id: Value "&" is not snowflake.
 
 
-	console.error('Discord Unhandled promise rejection:', error);
+	console.error('Discord Unhandled promise rejection:', (error));
 	process.send({
 		type: "process:msg",
 		data: "discorderror"
@@ -469,15 +547,23 @@ process.on('unhandledRejection', error => {
 
 
 function respawnCluster(err) {
-	if (err.toString().match(/CLUSTERING_NO_CHILD_EXISTS/i)) {
-		let number = err.toString().match(/\d+$/i);
-		if (!number) return;
-		if (!errorCount[number]) errorCount[number] = 0;
-		errorCount[number]++;
-		if (errorCount[number] > 3) {
-			client.cluster.evalOnManager(this.clusters.get(number).respawn())
+	if (!err.toString().match(/CLUSTERING_NO_CHILD_EXISTS/i)) return;
+	let number = err.toString().match(/\d+$/i);
+	if (!errorCount[number]) errorCount[number] = 0;
+	errorCount[number]++;
+	if (errorCount[number] > 3) {
+		try {
+			client.cluster.evalOnManager(`this.clusters.get(${client.cluster.id}).respawn({ delay: 7000, timeout: -1 })`, { timeout: 10000 });
+		} catch (error) {
+			console.error('respawnCluster #480 error', (error && error.name), (error && error.message), (error && error.reson));
 		}
-
+	}
+}
+function respawnCluster2() {
+	try {
+		client.cluster.evalOnManager(`this.clusters.get(${client.cluster.id}).respawn({ delay: 7000, timeout: -1 })`, { timeout: 10000 });
+	} catch (error) {
+		console.error('respawnCluster2 error', (error && error.name), (error && error.message), (error && error.reson));
 	}
 }
 
@@ -607,21 +693,22 @@ async function manageWebhook(discord) {
 		const isThread = channel && channel.isThread();
 		let webhooks = isThread ? await channel.guild.fetchWebhooks() : await channel.fetchWebhooks();
 		let webhook = webhooks.find(v => {
-			return v.name == 'HKTRPG .me Function' && v.type == "Incoming" && ((v.channelId == channel.parentId) || !isThread);
+			return (v.channelId == channel.parentId || v.channelId == channel.id) && v.token;
 		})
+
 		//type Channel Follower
 		//'Incoming'
 		if (!webhook) {
 			const hooks = isThread ? await client.channels.fetch(channel.parentId) : channel;
-			await hooks.createWebhook("HKTRPG .me Function", { avatar: "https://user-images.githubusercontent.com/23254376/113255717-bd47a300-92fa-11eb-90f2-7ebd00cd372f.png" })
+			await hooks.createWebhook({ name: "HKTRPG .me Function", avatar: "https://user-images.githubusercontent.com/23254376/113255717-bd47a300-92fa-11eb-90f2-7ebd00cd372f.png" })
 			webhooks = await channel.fetchWebhooks();
 			webhook = webhooks.find(v => {
-				return v.name == 'HKTRPG .me Function' && v.type == "Incoming";
+				return (v.channelId == channel.parentId || v.channelId == channel.id) && v.token;
 			})
 		}
 		return { webhook, isThread };
 	} catch (error) {
-		//console.error(error)
+		//	console.error(error)
 		await SendToReplychannel({ replyText: '不能新增Webhook.\n 請檢查你有授權HKTRPG 管理Webhook的權限, \n此為本功能必須權限', channelid: (discord.channel && discord.channel.id) || discord.channelId });
 		return;
 	}
@@ -664,19 +751,28 @@ async function newRoleReact(channel, message) {
 
 }
 async function checkWakeUp() {
-	const number = Cluster.data.TOTAL_SHARDS;
 	const promises = [
-		client.cluster.broadcastEval(c => c.shard?.ids[0]),
-		client.cluster.broadcastEval(c => c.ws.status),
+		client.cluster.broadcastEval(c => c.ws.status)
 	];
 	return Promise.all(promises)
 		.then(results => {
-			if (results[0].length !== number || results[1].reduce((a, b) => a + b, 0) >= 1)
-				return false
+			const indexes = results[0].reduce((r, n, i) => {
+				n !== 0 && r.push(i);
+				return r;
+			}, []);
+			if (indexes.length > 0) {
+				indexes.forEach(index => {
+					//checkMongodb.discordClientRespawn(client, index)
+				})
+				return indexes;
+			}
 			else return true;
+			//if (results[0].length !== number || results[0].reduce((a, b) => a + b, 0) >= 1)
+			//		return false
+			//	else return true;
 		})
-		.catch(err => {
-			console.error(`disocrdbot #836 error ${err}`)
+		.catch(error => {
+			console.error(`disocrdbot #836 error `, (error && error.name), (error && error.message), (error && error.reson))
 			return false
 		});
 
@@ -701,18 +797,21 @@ async function getAllshardIds() {
 		return;
 	}
 	const promises = [
-		client.cluster.ids.map(d => `#${d.id}`),
+		[...client.cluster.ids.keys()],
 		client.cluster.broadcastEval(c => c.ws.status),
-		client.cluster.broadcastEval(c => c.ws.ping)
+		client.cluster.broadcastEval(c => c.ws.ping),
+		client.cluster.id,
+
 	];
 	return Promise.all(promises)
 		.then(results => {
-			return `所有啓動中的server ID:   ${results[0].join(', ')} 
-			所有啓動中的server online:   ${results[1].map(ele => discordPresenceStatus[ele]).join(', ')} 
-			所有啓動中的server ping:   ${results[2].map(ele => ele.toFixed(0)).join(', ')}`
+			return `\n現在的shard ID: ${results[3]}
+			所有啓動中的shard ID:   ${results[0]} 
+			所有啓動中的shard online:   ${results[1].map(ele => discordPresenceStatus[ele]).join(', ').replace(/online/g, '在線')} 
+			所有啓動中的shard ping:   ${results[2].map(ele => ele.toFixed(0)).join(', ')}`
 		})
-		.catch(err => {
-			console.error(`disocrdbot #884 error ${err}`)
+		.catch(error => {
+			console.error(`disocrdbot #884 error `, (error && error.name), (error && error.message), (error && error.reson))
 		});
 
 }
@@ -722,14 +821,14 @@ async function handlingButtonCreate(message, input) {
 	const row = []
 	const totallyQuotient = ~~((buttonsNames.length - 1) / 5) + 1;
 	for (let index = 0; index < totallyQuotient; index++) {
-		row.push(new MessageActionRow())
+		row.push(new ActionRowBuilder())
 	}
 	for (let i = 0; i < buttonsNames.length; i++) {
 		const quot = ~~(i / 5)
 		const name = buttonsNames[i] || 'null'
 		row[quot]
 			.addComponents(
-				new MessageButton()
+				new ButtonBuilder()
 					.setCustomId(`${name}_${i}`)
 					.setLabel(name)
 					.setStyle(buttonsStyle(i)),
@@ -750,14 +849,14 @@ async function handlingRequestRollingCharacter(message, input) {
 	const row = []
 	const totallyQuotient = ~~((buttonsNames.length - 1) / 5) + 1;
 	for (let index = 0; index < totallyQuotient; index++) {
-		row.push(new MessageActionRow())
+		row.push(new ActionRowBuilder())
 	}
 	for (let i = 0; i < buttonsNames.length; i++) {
 		const quot = ~~(i / 5)
 		const name = buttonsNames[i] || 'null'
 		row[quot]
 			.addComponents(
-				new MessageButton()
+				new ButtonBuilder()
 					.setCustomId(`${name}_${i}`)
 					.setLabel(name)
 					.setStyle(buttonsStyle(i)),
@@ -786,14 +885,14 @@ async function handlingRequestRolling(message, buttonsNames, displayname = '') {
 	const row = []
 	const totallyQuotient = ~~((buttonsNames.length - 1) / 5) + 1
 	for (let index = 0; index < totallyQuotient; index++) {
-		row.push(new MessageActionRow())
+		row.push(new ActionRowBuilder())
 	}
 	for (let i = 0; i < buttonsNames.length; i++) {
 		const quot = ~~(i / 5)
 		const name = buttonsNames[i] || 'null'
 		row[quot]
 			.addComponents(
-				new MessageButton()
+				new ButtonBuilder()
 					.setCustomId(`${name}_${i}`)
 					.setLabel(name)
 					.setStyle(buttonsStyle(i)),
@@ -801,12 +900,17 @@ async function handlingRequestRolling(message, buttonsNames, displayname = '') {
 	}
 	const arrayRow = await splitArray(5, row)
 	for (let index = 0; index < arrayRow.length; index++) {
-		await message.reply({ content: `${displayname}要求擲骰/點擊`, components: arrayRow[index] }).catch();
+		try {
+			await message.reply({ content: `${displayname}要求擲骰/點擊`, components: arrayRow[index] })
+		} catch (error) {
+
+		}
+
 	}
 }
 async function splitArray(perChunk, inputArray) {
-	var myArray = [];
-	for (var i = 0; i < inputArray.length; i += perChunk) {
+	let myArray = [];
+	for (let i = 0; i < inputArray.length; i += perChunk) {
 		myArray.push(inputArray.slice(i, i + perChunk));
 	}
 	return myArray;
@@ -839,7 +943,7 @@ async function handlingResponMessage(message, answer = '') {
 		let hasSendPermission = true;
 		/**
 				if (message.guild && message.guild.me) {
-					hasSendPermission = (message.channel && message.channel.permissionsFor(message.guild.me)) ? message.channel.permissionsFor(message.guild.me).has(Permissions.FLAGS.SEND_MESSAGES) : false;
+					hasSendPermission = (message.channel && message.channel.permissionsFor(message.guild.me)) ? message.channel.permissionsFor(message.guild.me).has(PermissionsBitField.Flags.SEND_MESSAGES) : false;
 				}
 				 */
 		if (answer) message.content = answer;
@@ -905,16 +1009,19 @@ async function handlingResponMessage(message, answer = '') {
 		if (rplyVal.sendNews) sendNewstoAll(rplyVal);
 
 		if (rplyVal.sendImage) sendBufferImage(message, rplyVal, userid)
-
+		if (rplyVal.fileLink?.length > 0) sendFiles(message, rplyVal, userid)
+		if (rplyVal.respawn) respawnCluster2();
 		if (!rplyVal.text && !rplyVal.LevelUp) return;
-		try {
-			let isNew = await newMessage.newUserChecker(userid, "Discord");
-			if (process.env.mongoURL && rplyVal.text && isNew) {
-				SendToId(userid, newMessage.firstTimeMessage(), true);
+		if (process.env.mongoURL)
+			try {
+
+				const isNew = await newMessage.newUserChecker(userid, "Discord");
+				if (process.env.mongoURL && rplyVal.text && isNew) {
+					SendToId(userid, newMessage.firstTimeMessage(), true);
+				}
+			} catch (error) {
+				console.error(`discord bot error #236`, (error && error.name && error.message));
 			}
-		} catch (error) {
-			console.error(`discord bot error #236`, error)
-		}
 
 		if (rplyVal.state) {
 			rplyVal.text += '\n' + await count();
@@ -930,7 +1037,7 @@ async function handlingResponMessage(message, answer = '') {
 			message.author.send({
 				content: '這是頻道 ' + message.channel.name + ' 的聊天紀錄',
 				files: [
-					"./tmp/" + rplyVal.discordExport + '.txt'
+					new AttachmentBuilder("./tmp/" + rplyVal.discordExport + '.txt')
 				]
 			});
 		}
@@ -965,12 +1072,41 @@ async function handlingResponMessage(message, answer = '') {
 		};
 
 	} catch (error) {
-		console.error('handlingResponMessage Error: ', error)
+		console.error('handlingResponMessage Error: ', error, (error && error.name), (error && error.message), (error && error.reson))
 	}
 }
 const sendBufferImage = async (message, rplyVal, userid) => {
-	await message.channel.send({ content: `<@${userid}>\n你的Token 已經送到`, files: [{ attachment: rplyVal.sendImage }] });
+	await message.channel.send({
+		content: `<@${userid}>\n你的Token已經送到，現在輸入 .token 為方型，.token2 為圓型 .token3 為按名字決定的隨機顏色`, files: [
+			new AttachmentBuilder(rplyVal.sendImage)
+		]
+	});
 	fs.unlinkSync(rplyVal.sendImage);
+	return;
+}
+const sendFiles = async (message, rplyVal, userid) => {
+	let text = rplyVal.fileText || '';
+	let files = [];
+	for (let index = 0; index < rplyVal.fileLink.length; index++) {
+		files.push(new AttachmentBuilder(rplyVal.fileLink[index]))
+	}
+	try {
+		await message.channel.send({
+			content: `<@${userid}>\n${text}`, files
+		});
+	} catch (error) {
+		console.error;
+	}
+	for (let index = 0; index < rplyVal.fileLink.length; index++) {
+		try {
+			fs.unlinkSync(files[index]);
+		}
+		catch (error) {
+			console.error('discord bot error #1082', (error?.name, error?.message), files);
+		}
+
+	}
+
 	return;
 }
 
@@ -1046,7 +1182,7 @@ async function handlingSendMessage(input) {
 			return;
 		default:
 			if (userid) {
-				sendText = `<@${userid}> ${(statue) ? statue : ''}\n${sendText}`;
+				sendText = `<@${userid}> ${(statue) ? statue : ''}${candle.checker()}\n${sendText}`;
 			}
 			if (groupid) {
 				await SendToReplychannel({ replyText: sendText, channelid, quotes: quotes, buttonCreate: buttonCreate });
@@ -1064,31 +1200,28 @@ const convertRegex = function (str = "") {
 const connect = function () {
 	ws = new WebSocket('ws://127.0.0.1:53589');
 	ws.on('open', function open() {
-		console.log(`connectd To core-www from discord! Shard#${shardids}`)
-		ws.send(`connectd To core-www from discord! Shard#${shardids}`);
+		console.log(`connectd To core-www from discord! Shard#${shardid}`)
+		ws.send(`connectd To core-www from discord! Shard#${shardid}`);
 	});
-	ws.on('message', function incoming(data) {
-		if (shardids !== 0) return;
-		var object = JSON.parse(data);
-		if (object.botname == 'Discord') {
-			const promises = [
-				object,
-				//client.shard.broadcastEval(client => client.channels.fetch(object.message.target.id)),
-			];
-			Promise.all(promises)
-				.then(async results => {
-					let channel = await client.channels.fetch(results[0].message.target.id);
-					if (channel)
-						channel.send(results[0].message.text)
-				})
-				.catch(err => {
-					console.error(`disocrdbot #99 error ${err}`)
-				});
-			return;
+	ws.on('message', async function incoming(data) {
+		//if (shardid !== 0) return;
+		const object = JSON.parse(data);
+		if (object.botname !== 'Discord') return;
+
+		try {
+			let channel = await client.channels.cache.get(object.message.target.id);
+			if (channel) {
+				await channel.send(object.message.text)
+			}
 		}
+		catch (error) {
+			console.error(`disocrdbot #99 error `, (error && error.name), (error && error.message), (error && error.reson))
+		};
+		return;
+
 	});
 	ws.on('error', (error) => {
-		console.error('Discord socket error', error);
+		console.error('Discord socket error', (error && error.name), (error && error.message), (error && error.reson));
 	});
 	ws.on('close', function () {
 		console.error('Discord socket close');
@@ -1101,7 +1234,8 @@ function handlingButtonCommand(message) {
 }
 async function handlingEditMessage(message, rplyVal) {
 	try {
-		if (message.type !== 'REPLY') return message.reply({ content: '請Reply 你所想要修改的指定訊息' });
+		//type = reply
+		if (message.type !== 19) return message.reply({ content: '請Reply 你所想要修改的指定訊息' });
 		if (message.channelId !== message.reference.channelId) return message.reply({ content: '請只修改同一個頻道的訊息' });
 		const editReply = rplyVal.discordEditMessage;
 		const channel = await client.channels.fetch(message.reference.channelId);
@@ -1127,14 +1261,14 @@ async function handlingEditMessage(message, rplyVal) {
 //TOP.GG 
 const togGGToken = process.env.TOPGG;
 if (togGGToken) {
-	if (shardids !== (Cluster.data.TOTAL_SHARDS - 1)) return;
+	if (shardid !== (getInfo().TOTAL_SHARDS - 1)) return;
 	const Topgg = require(`@top-gg/sdk`)
 	const api = new Topgg.Api(togGGToken)
 	this.interval = setInterval(async () => {
 		const guilds = await client.cluster.fetchClientValues("guilds.cache.size");
 		api.postStats({
 			serverCount: parseInt(guilds.reduce((a, c) => a + c, 0)),
-			shardCount: Cluster.data.TOTAL_SHARDS,
+			shardCount: getInfo().TOTAL_SHARDS,
 			shardId: client.cluster.id
 		});
 	}, 300000);
@@ -1142,7 +1276,6 @@ if (togGGToken) {
 
 async function sendCronWebhook({ channelid, replyText, data }) {
 	let webhook = await manageWebhook({ channelId: channelid })
-	//threadId: discord.channelId,
 	let obj = {
 		content: replyText,
 		username: data.roleName,
@@ -1152,6 +1285,7 @@ async function sendCronWebhook({ channelid, replyText, data }) {
 	await webhook.webhook.send({ ...obj, ...pair });
 }
 async function handlingMultiServerMessage(message) {
+	if (!process.env.mongoURL) return;
 	let target = multiServer.multiServerChecker(message.channel.id)
 	if (!target) return;
 	else {
@@ -1161,7 +1295,7 @@ async function handlingMultiServerMessage(message) {
 		const targetData = target
 		let webhook = await manageWebhook({ channelId: targetData.channelid })
 		let pair = (webhook && webhook.isThread) ? { threadId: targetData.channelid } : {};
-		await webhook.webhook.send({ ...sendMessage, ...pair });
+		await webhook?.webhook.send({ ...sendMessage, ...pair });
 		//	}
 
 	}
@@ -1170,31 +1304,39 @@ async function handlingMultiServerMessage(message) {
 function multiServerTarget(message) {
 	const obj = {
 		content: message.content,
-		username: message._member.nickname || message._member.displayName,
+		username: message?._member?.nickname || message?._member?.displayName,
 		avatarURL: message.author.displayAvatarURL()
 	};
 	return obj;
 }
 
 function __checkUserRole(groupid, message) {
-	if (groupid && message.member && message.member.permissions.has(Permissions.FLAGS.ADMINISTRATOR))
-		return 3;
-	if (groupid && message.channel.permissionsFor(message.member) && message.channel.permissionsFor(message.member).has(Permissions.FLAGS.MANAGE_CHANNELS)) return 2;
+	try {
+		if (groupid && message.member && message.member.permissions.has(PermissionsBitField.Flags.Administrator))
+			return 3;
+		if (groupid && message.channel && message.channel.permissionsFor(message.member) && message.channel.permissionsFor(message.member).has(PermissionsBitField.Flags.ManageChannels)) return 2;
+		return 1;
+	} catch (error) {
+		//	console.log('error', error)
+		return 1;
+	}
 
-	return 1;
 }
 
 async function __handlingReplyMessage(message, result) {
 	const text = result.text;
 	const sendTexts = text.toString().match(/[\s\S]{1,2000}/g);
-	for (let index = 0; index < sendTexts.length; index++) {
+	for (let index = 0; index < sendTexts?.length && index < 4; index++) {
 		const sendText = sendTexts[index];
-		if (sendText.length === 0) continue;
 		try {
-			await message.reply({ content: `${sendText}`, ephemeral: false })
+			if (index == 0)
+				await message.reply({ embeds: await convQuotes(sendText), ephemeral: false })
+			else
+				await message.channel.send({ embeds: await convQuotes(sendText), ephemeral: false })
+
 		} catch (error) {
 			try {
-				await message.editReply({ content: `${sendText}`, ephemeral: false })
+				await message.editReply({ embeds: await convQuotes(sendText), ephemeral: false })
 			} catch (error) {
 				return;
 			}
@@ -1219,13 +1361,22 @@ async function __handlingInteractionMessage(message) {
 				const displayname = (message.member && message.member.id) ? `<@${message.member.id}>\n` : '';
 				const resultText = (result && result.text) || '';
 				if (/的角色卡$/.test(messageContent)) {
-					if (resultText) { return await message.reply({ content: `${displayname}${messageContent.replace(/的角色卡$/, '')}進行擲骰 \n${resultText}`, ephemeral: false }).catch() }
-					else {
-						return await message.reply({ content: `${displayname}沒有反應，請檢查按鈕內容`, ephemeral: true }).catch()
+					try {
+						if (resultText) { return await message.reply({ content: `${displayname}${messageContent.replace(/的角色卡$/, '')}進行擲骰 \n${resultText}`, ephemeral: false }).catch() }
+						else {
+							return await message.reply({ content: `${displayname}沒有反應，請檢查按鈕內容`, ephemeral: true }).catch()
+						}
+					} catch (error) {
+						console.error();
 					}
 				}
 				if (/的角色$/.test(messageContent)) {
-					return await message.reply({ content: `${displayname}${resultText}`, ephemeral: false }).catch();
+					try {
+						return await message.reply({ content: `${displayname}${resultText}`, ephemeral: false })
+					} catch (error) {
+						null;
+					}
+
 				}
 				if (resultText) {
 					const content = handlingCountButton(message, 'roll');
@@ -1239,7 +1390,7 @@ async function __handlingInteractionMessage(message) {
 				else {
 					const content = handlingCountButton(message, 'count');
 					return await message.update({ content: content })
-						.catch(error => console.error('discord bot #192  error: ', error, content));
+						.catch(error => console.error('discord bot #192  error: ', (error && (error.name || error.message || error.reson)), content));
 				}
 			}
 		default:
@@ -1269,6 +1420,10 @@ client.on('shardResume', (replayed, shardID) => console.log(`Shard ID ${shardID}
 client.on('shardReconnecting', id => console.log(`Shard with ID ${id} reconnected.`));
 
 
+if (debugMode) process.on('warning', e => {
+	console.warn(e.stack)
+});
+
 
 /**
  *
@@ -1296,5 +1451,5 @@ client.on('shardReconnecting', id => console.log(`Shard with ID ${id} reconnecte
 )
 .addField('Inline field title', 'Some value here', true)
  */
-	//.setImage('https://i.imgur.com/wSTFkRM.png')
-	//.setFooter('Some footer text here', 'https://i.imgur.com/wSTFkRM.png');
+//.setImage('https://i.imgur.com/wSTFkRM.png')
+//.setFooter('Some footer text here', 'https://i.imgur.com/wSTFkRM.png');

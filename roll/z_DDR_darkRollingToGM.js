@@ -3,7 +3,7 @@ if (!process.env.mongoURL) {
     return;
 }
 const records = require('../modules/records.js');
-var trpgDarkRollingfunction = {};
+let trpgDarkRollingfunction = {};
 const checkTools = require('../modules/check.js');
 records.get('trpgDarkRolling', (msgs) => {
     trpgDarkRollingfunction.trpgDarkRollingfunction = msgs
@@ -182,7 +182,7 @@ const rollDiceCommand = async function ({ mainMsg, groupid, userid, userrole, bo
                             rply.text += '已註冊暗骰GM列表:'
                             for (let a = 0; a < trpgDarkRollingfunction.trpgDarkRollingfunction[i].trpgDarkRollingfunction.length; a++) {
                                 temp = 1
-                                rply.text += ("\n") + a + '. ' + (trpgDarkRollingfunction.trpgDarkRollingfunction[i].trpgDarkRollingfunction[a].diyName || trpgDarkRollingfunction.trpgDarkRollingfunction[i].trpgDarkRollingfunction[a].displayname) + ("\n")
+                                rply.text += ("\n") + a + ": " + (trpgDarkRollingfunction.trpgDarkRollingfunction[i].trpgDarkRollingfunction[a].diyName || trpgDarkRollingfunction.trpgDarkRollingfunction[i].trpgDarkRollingfunction[a].displayname) + ("\n")
                             }
                         }
                     }

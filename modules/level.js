@@ -6,12 +6,11 @@ exports.rollbase = require('../roll/rollbase');
 const THIRTY_MINUTES = (process.env.DEBUG) ? 1 : 60000 * 30;
 const retry = { number: 0, times: 0 };
 const schema = require('./schema.js');
-var tempSwitchV2 = [{
+let tempSwitchV2 = [{
     groupid: '',
     SwitchV2: false
 }];
 async function EXPUP(groupid, userid, displayname, displaynameDiscord, membercount, tgDisplayname, discordMessage) {
-    if (!checkMongodb.isDbOnline()) return;
     if (!groupid) {
         return;
     }
@@ -28,14 +27,19 @@ async function EXPUP(groupid, userid, displayname, displaynameDiscord, membercou
         return group.groupid == groupid;
     });
     if (filterSwitchV2 && (filterSwitchV2.SwitchV2 === false)) return;
+    if (!checkMongodb.isDbOnline()) return;
     const gpInfo = await schema.trpgLevelSystem.findOne({
         groupid: groupid,
         SwitchV2: true
-    }).catch(error => {
+    }).cache(60).catch(error => {
         console.error('level #26 mongoDB error: ', error.name, error.reson)
         checkMongodb.dbErrOccurs();
         retry.number++;
         retry.times = new Date();
+        if (retry > 20 && !checkMongodb.isDbOnline()) {
+            reply.respawn = true;
+            return reply
+        }
     });
     if (filterSwitchV2 === undefined) {
         if (!gpInfo || !gpInfo.SwitchV2) {
@@ -52,13 +56,15 @@ async function EXPUP(groupid, userid, displayname, displaynameDiscord, membercou
     }
     //1. 檢查GROUP ID 有沒有開啓CONFIG 功能 1
     if (!gpInfo || !gpInfo.SwitchV2) return;
+    if (!checkMongodb.isDbOnline()) return;
     let userInfo = await schema.trpgLevelSystemMember.findOne({
         groupid: groupid,
         userid: userid
-    }).catch(error => {
-        console.error('level #46 mongoDB error: ', error.name, error.reson)
-        checkMongodb.dbErrOccurs();
-    });
+    })
+        .catch(error => {
+            console.error('level #46 mongoDB error: ', error.name, error.reson)
+            checkMongodb.dbErrOccurs();
+        });
     if (!userInfo) {
         await newUser(gpInfo, groupid, userid, displayname, displaynameDiscord, tgDisplayname);
         return;
@@ -78,6 +84,7 @@ async function EXPUP(groupid, userid, displayname, displaynameDiscord, membercou
     }
 
     let exp = await exports.rollbase.Dice(9) + 15;
+    if (isNaN(userInfo.decreaseEXPTimes)) userInfo.decreaseEXPTimes = 0;
     switch (true) {
         case (userInfo.decreaseEXPTimes > 0):
             userInfo.EXP -= userInfo.decreaseEXP;
@@ -108,9 +115,11 @@ async function EXPUP(groupid, userid, displayname, displaynameDiscord, membercou
     }
     //8. 更新MLAB資料
     try {
+        if (!checkMongodb.isDbOnline()) return;
         await userInfo.save();
     } catch (error) {
-        console.log('mongodb #109 error', error)
+        console.error('mongodb #109 error', error);
+        checkMongodb.dbErrOccurs();
     }
 
     //6. 需要 -> 檢查有沒有開啓通知
@@ -179,7 +188,7 @@ async function getDisplayName(message) {
 }
 
 const Title = function () {
-    var Title = []
+    let Title = []
     Title[0] = "無名調查員";
     Title[3] = "雀";
     Title[4] = "調查員";

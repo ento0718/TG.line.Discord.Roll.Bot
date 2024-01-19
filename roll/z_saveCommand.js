@@ -4,7 +4,7 @@ if (!process.env.mongoURL) {
 }
 const checkTools = require('../modules/check.js');
 const records = require('../modules/records.js');
-var trpgCommandfunction = {};
+let trpgCommandfunction = {};
 records.get('trpgCommand', (msgs) => {
     trpgCommandfunction.trpgCommandfunction = msgs
 })
@@ -72,9 +72,9 @@ const rollDiceCommand = async function ({
             if (!mainMsg[3]) rply.text += ' 沒有擲骰指令\n\n'
             if (mainMsg[3] && mainMsg[3].toLowerCase() == ".cmd") rply.text += '指令不可以儲存.cmd\n\n'
             if (rply.text += checkTools.permissionErrMsg({
-                flag : checkTools.flag.ChkChannelManager,
-                gid : groupid,
-                role : userrole
+                flag: checkTools.flag.ChkChannelManager,
+                gid: groupid,
+                role: userrole
             })) {
                 return rply;
             }
@@ -85,7 +85,7 @@ const rollDiceCommand = async function ({
             if (trpgCommandfunction.trpgCommandfunction)
                 for (let i = 0; i < trpgCommandfunction.trpgCommandfunction.length; i++) {
                     if (trpgCommandfunction.trpgCommandfunction[i].groupid == groupid) {
-                        if (trpgCommandfunction.trpgCommandfunction[i].trpgCommandfunction.length >= 30) {
+                        if (trpgCommandfunction.trpgCommandfunction[i].trpgCommandfunction.length >= limit) {
                             rply.text = '關鍵字上限' + limit + '個\n支援及解鎖上限 https://www.patreon.com/HKTRPG\n';
                             return rply;
                         }
@@ -119,9 +119,9 @@ const rollDiceCommand = async function ({
         case /(^[.]cmd$)/i.test(mainMsg[0]) && /^del$/i.test(mainMsg[1]) && /^all$/i.test(mainMsg[2]):
             //刪除資料庫
             if (rply.text = checkTools.permissionErrMsg({
-                flag : checkTools.flag.ChkChannelManager,
-                gid : groupid,
-                role : userrole
+                flag: checkTools.flag.ChkChannelManager,
+                gid: groupid,
+                role: userrole
             })) {
                 return rply;
             }
@@ -143,9 +143,9 @@ const rollDiceCommand = async function ({
             //刪除資料庫
             if (!mainMsg[2]) rply.text += '沒有關鍵字. '
             if (rply.text += checkTools.permissionErrMsg({
-                flag : checkTools.flag.ChkChannelManager,
-                gid : groupid,
-                role : userrole
+                flag: checkTools.flag.ChkChannelManager,
+                gid: groupid,
+                role: userrole
             })) {
                 return rply;
             }
@@ -179,7 +179,7 @@ const rollDiceCommand = async function ({
                         rply.text += '資料庫列表:'
                         for (let a = 0; a < trpgCommandfunction.trpgCommandfunction[i].trpgCommandfunction.length; a++) {
                             temp = 1
-                            rply.text += ("\n") + a + '. ' + trpgCommandfunction.trpgCommandfunction[i].trpgCommandfunction[a].topic + '\n' + trpgCommandfunction.trpgCommandfunction[i].trpgCommandfunction[a].contact + '\n'
+                            rply.text += ("\n") + a + ": " + trpgCommandfunction.trpgCommandfunction[i].trpgCommandfunction[a].topic + '\n' + trpgCommandfunction.trpgCommandfunction[i].trpgCommandfunction[a].contact + '\n'
                         }
                     }
                 }
@@ -206,8 +206,8 @@ const rollDiceCommand = async function ({
                         }
                     }
                 }
-            if (temp == 0) rply.text = '沒有相關關鍵字. '
-            rply.text = rply.text.replace(/,/mg, ' ')
+            if (temp == 0) rply.text = '沒有相關關鍵字. ';
+            //rply.text = rply.text.replace(/,/mg, ' ')
             return rply;
         default:
             break;

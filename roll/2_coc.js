@@ -7,13 +7,13 @@ const mathjs = require('mathjs');
 const gameName = function () {
 	return '【克蘇魯神話】 cc cc(n)1~2 ccb ccrt ccsu .dp .cc7build .cc6build .cc7bg'
 }
-const { SlashCommandBuilder } = require('@discordjs/builders');
+const { SlashCommandBuilder } = require('discord.js');
 const gameType = function () {
 	return 'Dice:CoC'
 }
 const prefixs = function () {
 	return [{
-		first: /(^ccrt$)|(^\.chase$)|(^ccsu$)|(^cc7版創角$)|(^[.]dp$)|(^[.]cc7build$)|(^[.]ccpulpbuild$)|(^[.]cc6build$)|(^[.]cc7bg$)|(^cc6版創角$)|(^cc7版角色背景$)/i,
+		first: /(^\.cccc$)|(^\.ccdr$)|(^\.ccpc$)|(^ccrt$)|(^\.chase$)|(^ccsu$)|(^cc7版創角$)|(^[.]dp$)|(^[.]cc7build$)|(^[.]ccpulpbuild$)|(^[.]cc6build$)|(^[.]cc7bg$)|(^cc6版創角$)|(^cc7版角色背景$)/i,
 		second: null
 	},
 	{
@@ -42,10 +42,22 @@ P.S.追逐戰功能使用了可選規則及我對規則書之獨斷理解，
 coc7版 即時型瘋狂： 啓動語 ccrt
 coc7版 總結型瘋狂： 啓動語 ccsu
 
-coc pulp版創角	： 啓動語 .ccpulpbuild
-coc6版創角		： 啓動語 .cc6build
-coc7版創角		： 啓動語 .cc7build (歲數7-89)
-coc7版隨機創角	： 啓動語 .cc7build random
+coc7版 神話組織 隨機產生： 啓動語 .cccc
+coc7版 神話資料 隨機產生： 啓動語 .ccdr
+coc7版 施法推骰後果： 啓動語 .ccpc
+
+coc pulp版創角			： 啓動語 .ccpulpbuild
+coc6版創角				： 啓動語 .cc6build
+coc7版創角				： 啓動語 .cc7build (歲數7-89)
+coc7版隨機創角			： 啓動語 .cc7build random
+coc7版自由分配點數創角	： 啓動語 .cc7build .xyz (歲數7-89)
+如.cc7build .752 
+就會擲出
+7次 3d6 * 5
+5次 (2d6+6) * 5 
+2次 3d6 * 5
+可只輸入.  不輸入xyz
+預設值為 .53 即5次 3d6 * 5 和3次 (2d6+6) * 5 
 
 coc7 成長或增強檢定： .dp 或 成長檢定 或 幕間成長 (技能%) (名稱) (可以一次輸入多個)
 例）.DP 50 騎乘 80 鬥毆  70 60
@@ -78,7 +90,8 @@ const rollDiceCommand = async function ({
 	channelid,
 	displayname,
 	displaynameDiscord,
-	tgDisplayname
+	tgDisplayname,
+	botname
 }) {
 	let rply = {
 		default: 'on',
@@ -103,7 +116,9 @@ const rollDiceCommand = async function ({
 			break;
 		}
 		case /^\.sc$/i.test(mainMsg[0]): {
-			rply.text = sc(mainMsg);
+			let sc = new SanCheck(mainMsg, botname);
+			rply.text = sc.run();
+			rply.buttonCreate = sc.getButton();
 			rply.quotes = true;
 			break;
 		}
@@ -172,12 +187,12 @@ const rollDiceCommand = async function ({
 			};
 			let successResultWithoutName = {
 				data: false,
-				text: `------------
+				text: `=======
 				無記名成功結果`}
 				;
 			let criticalSuccessNfumbleResult = {
 				data: false,
-				text: `------------
+				text: `=======
 				大成功與大失敗`}
 				;
 			for (let index = 0; index < result.length; index++) {
@@ -200,14 +215,14 @@ const rollDiceCommand = async function ({
 			}
 			/**
 			 * 成功的擲骰結果
-			 * -------------
+			 * =======
 			 * 空手 50	拳擊 60	拳	80
 			 * 空手 50	拳擊 60	拳	80 	
-			 * ------------
+			 * =======
 			 * 無記名成功結果
 			 * 21-08-04 12:33 技能	80
 			 * 21-08-04 13:33 技能	80
-			 * ------------
+			 * =======
 			 * 大成功與大失敗
 			 * 技能	80	大失敗
 			 * 拳	80	大成功
@@ -247,7 +262,7 @@ const rollDiceCommand = async function ({
 			let criticalSuccessNfumbleResult = {
 				data: false,
 				text: `大成功與大失敗
-				------------`}
+				=======`}
 				;
 			for (let index = 0; index < result.length; index++) {
 				if (result[index].skillPerStyle == 'criticalSuccess' || result[index].skillPerStyle == 'fumble') {
@@ -287,7 +302,7 @@ const rollDiceCommand = async function ({
 				rply.text = '未有CC擲骰紀錄';
 				return rply;
 			}
-			rply.text = `自動成長檢定\n----------`;
+			rply.text = `自動成長檢定\n========`;
 			for (let index = 0; index < result.length; index++) {
 				let target = Number(result[index].skillPer);
 				let name = result[index].skillName || '無名技能';
@@ -385,8 +400,7 @@ const rollDiceCommand = async function ({
 		}
 
 		case /(^cc7版創角$)|(^[.]cc7build$)/i.test(mainMsg[0]): {
-			const age = mainMsg[1] || null;
-			rply.text = (build7char(age)).replace(/\*5/ig, ' * 5');
+			rply.text = builder.build(mainMsg[1] || 'random', mainMsg[2]).replace(/\*5/ig, ' * 5').trim();
 			rply.quotes = true;
 			break;
 		}
@@ -405,6 +419,22 @@ const rollDiceCommand = async function ({
 			rply.quotes = true;
 			break;
 		}
+		case /(^\.cccc)/i.test(mainMsg[0]): {
+			rply.text = CreateCult.createCult();
+			rply.quotes = true;
+			return rply;
+		};
+		case /(^\.ccpc)/i.test(mainMsg[0]): {
+			rply.text = MythoyCollection.getMythonData('pushedCasting');
+			rply.quotes = true;
+			return rply;
+		};
+		case /(^\.ccdr)/i.test(mainMsg[0]): {
+			rply.text = MythoyCollection.getMythos();
+			rply.quotes = true;
+			return rply;
+		};
+
 		default:
 			break;
 	}
@@ -445,10 +475,10 @@ const discordCommand = [
 			.addStringOption(option =>
 				option.setName('paney')
 					.setDescription('獎勵或懲罰骰')
-					.addChoice('1粒獎勵骰', '1')
-					.addChoice('2粒獎勵骰', '2')
-					.addChoice('1粒懲罰骰', 'n1')
-					.addChoice('2粒懲罰骰', 'n2'))
+					.addChoices({ name: '1粒獎勵骰', value: '1' },
+						{ name: '2粒獎勵骰', value: '2' },
+						{ name: '1粒懲罰骰', value: 'n1' },
+						{ name: '2粒懲罰骰', value: 'n2' }))
 		,
 		async execute(interaction) {
 			const text = interaction.options.getString('text')
@@ -513,13 +543,13 @@ const discordCommand = [
 			.addStringOption(option =>
 				option.setName('mode')
 					.setDescription('功能')
-					.addChoice('顯示擲骰紀錄', 'show')
-					.addChoice('顯示全頻道所有大成功大失敗擲骰紀錄', 'showall')
-					.addChoice('開啓紀錄功能', 'start')
-					.addChoice('停止紀錄功能', 'stop')
-					.addChoice('進行自動成長並清除擲骰紀錄', 'auto')
-					.addChoice('清除擲骰紀錄', 'clear')
-					.addChoice('清除擲骰紀錄包括大成功大失敗', 'clearall')
+					.addChoices({ name: '顯示擲骰紀錄', value: 'show' },
+						{ name: '顯示全頻道所有大成功大失敗擲骰紀錄', value: 'showall' },
+						{ name: '開啓紀錄功能', value: 'start' },
+						{ name: '停止紀錄功能', value: 'stop' },
+						{ name: '進行自動成長並清除擲骰紀錄', value: 'auto' },
+						{ name: '清除擲骰紀錄', value: 'clear' },
+						{ name: '清除擲骰紀錄包括大成功大失敗', value: 'clearall' })
 			),
 		async execute(interaction) {
 			const mode = interaction.options.getString('mode')
@@ -533,6 +563,31 @@ const discordCommand = [
 			return `.cc7bg`
 		}
 	}
+	, {
+		data: new SlashCommandBuilder()
+			.setName('cccc')
+			.setDescription('隨機產生 神話組織')
+		,
+		async execute() {
+			return `.cccc`
+		}
+	}, {
+		data: new SlashCommandBuilder()
+			.setName('ccdr')
+			.setDescription('隨機產生 神話資料')
+		,
+		async execute() {
+			return `.ccdr`
+		}
+	}, {
+		data: new SlashCommandBuilder()
+			.setName('ccpc')
+			.setDescription('施法推骰後果')
+		,
+		async execute() {
+			return `.ccpc`
+		}
+	}
 ];
 
 module.exports = {
@@ -544,6 +599,293 @@ module.exports = {
 	gameName,
 	discordCommand
 };
+
+class CreateCult {
+	constructor() {
+	}
+	/*
+	回應格式
+	==============
+	Cult 產生器
+	首領名字: XXXXXX
+
+	首領身份:
+	-> 1-10;
+	
+	屬性: A-D STR, CON, SIZ, DEX, INT, APP, POW, and EDU
+	
+	技能: QUICK-REFERENCE SKILLS  A-E
+
+	特質:  個性: 
+	-1-100
+
+	能力來源: 
+	SOURCES OF POWER 1-3, 4-6, 7-8, 9-10
+	==============
+	邪教名稱?
+
+	CULT GOALS—WANTS 1-10
+
+	CULT GOALS—MEANS 1-10
+	 */
+	static createCult() {
+		let cult = {
+			leaderPosition: this.leaderPosition(),
+			characteristics: this.characteristics(),
+			skill: this.skill(),
+			description: this.description(),
+			personality: this.personality(),
+			spells: this.spells(),
+			sourcesOfPower: this.sourcesOfPower(),
+			cultGoals: this.cultGoals(),
+			cultGoalsMeans: this.cultGoalsMeans(),
+		}
+		let cultText = `Cult 產生器
+	首領身份:
+	${cult.leaderPosition}
+	
+	屬性: 
+	${cult.characteristics}
+	
+	技能: 
+	${cult.skill}
+
+	法術:
+	${cult.spells}
+
+	特質: 
+	${cult.description}
+	
+	個性: 
+	${cult.personality}
+
+	能力來源: 
+	${cult.sourcesOfPower}
+	==============
+	教派目標:
+	${cult.cultGoals}
+
+	實現目標的手段:
+	${cult.cultGoalsMeans}`
+		return cultText;
+	}
+	static leaderPosition() {
+		return this.LeaderPosition[rollbase.Dice(10) - 1];
+	}
+	static characteristics() {
+		//四選一
+		let selectedCharacteristics = this.characteristicsSet[rollbase.Dice(4) - 1];
+		// 使用 Fisher–Yates 洗牌算法隨機排列屬性
+		selectedCharacteristics = this.FisherYates(selectedCharacteristics);
+		let text = '';
+		for (let i = 0; i < this.sixState.length; i++) {
+			text += `${this.sixState[i]}: ${selectedCharacteristics[i]} `;
+			if (i % 3 === 0 && i !== 0) {
+				text += '\n';
+			}
+		}
+		return text;
+	}
+
+	static skill() {
+		let text = '';
+		let skillStates = this.SkillStatesSet[rollbase.Dice(this.SkillStatesSet.length) - 1];
+		//使用 Fisher–Yates 洗牌算法隨機排列技能
+		skillStates = this.FisherYates(skillStates);
+		let skillNames = this.WightRandom(this.SkillNameSet(), Object.keys(this.SkillNameSet()).length);
+		for (let i = 0; i < skillStates.length; i++) {
+			text += `${skillNames[i]}: ${skillStates[i]} `;
+			if (i % 3 === 0 && i !== 0) {
+				text += '\n';
+			}
+		}
+		return text;
+	}
+	static description() {
+		return this.descriptionSet[rollbase.Dice(this.descriptionSet.length) - 1];
+	}
+	static personality() {
+		return this.traitsSet[rollbase.Dice(this.traitsSet.length) - 1];
+	}
+	static spells() {
+		let text = '';
+		let num = 0;
+		let spells = this.spellsSet[rollbase.Dice(this.spellsSet.length) - 1];
+		text = rollbase.BuildDiceCal(spells);
+		num = text.match(/\d+$/i)[0];
+		text += '\n';
+		text += ` ${this.getLeaderMythonList(num).join(', ')},`;
+		text = text.replace(/,$/i, '');
+		return text;
+	}
+	static getLeaderMythonList(count) {
+		const shuffledArr = MythoyCollection.Magic.slice();
+		for (let i = shuffledArr.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[shuffledArr[i], shuffledArr[j]] = [shuffledArr[j], shuffledArr[i]];
+		}
+		return shuffledArr.slice(0, count);
+	}
+	static sourcesOfPower() {
+		let text = '';
+		let num = rollbase.Dice(10);
+		switch (num) {
+			case 1: case 2: case 3:
+				text = this.SourcesOfPowerSet[0];
+				break;
+			case 4: case 5: case 6:
+				text = this.SourcesOfPowerSet[1];
+				break;
+			case 7: case 8:
+				text = this.SourcesOfPowerSet[2];
+				break;
+			case 9: case 10:
+				text = this.SourcesOfPowerSet[3];
+				break;
+		}
+		return text;
+	}
+	static cultGoals() {
+		return this.CultWants[rollbase.Dice(this.CultWants.length) - 1];
+	}
+	static cultGoalsMeans() {
+		return this.CultMeans[rollbase.Dice(this.CultMeans.length) - 1];
+	}
+	static WightRandom(options, num_choices) {
+
+		let choices = new Set();
+		while (choices.size < num_choices) {
+			let total_weight = 0;
+			for (let j in options) {
+				total_weight += options[j];
+			}
+			let rnd = Math.random() * total_weight;
+			for (let j in options) {
+				if (rnd < options[j]) {
+					choices.add(j);
+					options[j] = options[j] / 2;
+					break;
+				}
+				rnd -= options[j];
+			}
+		}
+		return Array.from(choices);
+	}
+	static FisherYates(arr) {
+		for (let j = arr.length - 1; j > 0; j--) {
+			const k = Math.floor(Math.random() * (j + 1));
+			[arr[j], arr[k]] = [arr[k], arr[j]];
+		}
+		return arr;
+	}
+
+	static sixState = ["STR", "CON", "SIZ", "DEX", "INT", "APP", "POW", "EDU"]
+	static characteristicsSet = [[75, 70, 65, 60, 55, 50, 40, 35],
+	[80, 75, 70, 60, 55, 50, 40, 35],
+	[90, 85, 80, 80, 70, 60, 60, 50],
+	[100, 80, 60, 60, 45, 40, 35, 35]
+	];
+
+	static LeaderPosition = [
+		`富有商人
+	金錢就是力量。擁有成功的小企業者；跨國公司董事會上的一員；有權勢的電影製片人；投資銀行家等等。`,
+		`家族女/男家長
+	血緣是一種具有特殊且具有束縛力的連結。阿巴拉契亞山脈中一個廣大家族的古老祖母；一個大型且有貴族氣質的家庭的尊貴曾祖父；一位強大巫師的後裔；一對雙胞胎的單親父或母。`,
+		`幫派領導者
+	罪犯有一種在雷達之下運作的方式——這種經驗可能在隱藏Cthulhu教派的活動時有所幫助。城市街頭幫派的領導者；犯罪組織的老大；大規模的毒品卡特爾的領導者；其他孩子們景仰的正在冒出頭角的街頭小混混。`,
+		`宗教領導者
+	已經位於影響力的位置，可以接觸到大量的人群，其中一些人急需幫助，更容易受到欺詐和誘惑。
+	這些宗教領袖可能免於課稅。主流宗教的神父，拉比，伊瑪目，或牧師。`,
+		`大學教授/老師
+	擁有接觸許多易受影響，年輕心靈的人的機會。一位高中老師或校長；擁有圖書館鑰匙的大學教授，圖書館內充滿著陳舊的書冊；
+	具有影響力的青年領袖，可帶領具有可被重新導向的活動組織的青年。`,
+		`政治家
+	政治影響力可以指導政策，甚至改變法律。市長或城市議會成員；州議會人員；州長甚至國家總統。 `,
+		`農民/工廠工人
+	"藍領" 宗教教派領袖可能對確保社會運作平穩的人有影響力，例如工廠員工，農村工人，建築行業和維修工人。`,
+		`軍官
+	在軍隊之中有個邪教是一個可怕的想法。可能是部隊中位階較高的官員，或者是在情報機構中的執行者，例如FBI或CIA，或是說，其他國家的相似機構。`,
+		`船長 
+	在海上，船長處於一個非常有威力的位置。可能是大型運輸船的船長，一艘帆船，一艘商船，甚至是一艘郵輪的船長。`,
+		`異類 
+	這些人士在社會邊緣活動，往往被忽視，例如巡迴銷售員，在家工作的網頁開發員，或者是一位藍調吉他手/歌手。`
+	]
+
+	static SkillStatesSet = [[80, 60, 60, 60, 50, 40],
+	[100, 80, 60, 60, 50, 40],
+	[90, 80, 70, 70, 60, 55],
+	[80, 75, 70, 65, 65, 60, 60, 55, 55, 50, 40, 25],
+	[90, 85, 75, 70, 60, 60, 60, 55, 50, 40, 30, 25]];
+
+	static SkillNameSet() {
+		return Object.assign({}, this.CombatSkills, this.CharacterSkills, this.UsefulSkills, this.ActionSkills);
+	};
+	static CombatSkills = { '閃避': 4, '鬥毆': 2, '鬥毆(刀/劍/棒)': 2, '射擊（手槍）': 3, '投擲': 1 };//1
+	static CharacterSkills = {
+		'信用評級': 4, '人類學': 1, '估價': 1, '考古學': 2, '語言': 1, '法律': 1, '博物學': 1, '物理學': 1
+	};//1
+	static UsefulSkills = { '克蘇魯神話': 10, '心理學': 4, '巧手': 3, '鎖匠': 2, '機械修理': 1, '駕駛汽車': 2, '喬裝': 2, '藝術/工藝（演技）': 3 }
+	static ActionSkills = { '偵查': 4, '話術': 1, '取悅': 3, '恐嚇': 2, '說服': 1, '攀爬': 1, '跳躍': 1, '聆聽': 1 }//1-5
+
+	static descriptionSet = ['肌肉發達', '毛髮蓬鬆', '眼神狂野', '全身冒汗', '牙齒狀況差', '非常高大', '非常「平凡」外表', '瘦骨嶙峋', '衣著整潔無瑕', '眯著眼睛', '深邃的眼睛', '下垂的', '多疤痕', '瘢痕累累', '眼睛眼距近', '有皺紋', '刺青', '高額頭', '雕刻般的', '眼睛深陷', '有鬍子', '下巴雙層', '鼻子歪曲', '突出的眉骨', '禿頭', '修剪整齊的指甲', '嬌小', '消瘦', '超重', '長滿老繭的手', '細薄的頭髮', '長指甲', '細長的', '苗條', '運動型', '沾滿墨水的手指', '豐滿的頭髮', '小手', '怪誕', '濕疹', '口臭', '全身同色的衣服', '缺指', '狹長的臉', '乾燥的皮膚', '高挑的', '穿耳環的', '臉頰凹陷', '豐滿', '單眼', '屍體般的', '面具', '腐爛的', '缺少一肢', '無毛的', '疾病纏身的', '縮小的', '虛弱的', '高聳的', '骨瘦如柴的', '貧血的', '彎曲的', '佝僂的', '靈巧的', '笨重的', '蒼白的', '野獸般的', '蠟色的', '狐狸般的', '臉龐像小天使的', '憔悴的', '令人厭惡的', '不老的', '肉感的', '枯萎的', '青筋浮現的皮膚', '纖維狀', '拋光過的', '繃緊的', '時髦的', '醜陋的', '骯髒的', '強壯的', '纖細的', '結實的', '眼鏡', '有吸引力的', '不修邊幅的', '獨眼鏡', '華麗的', '普通的外表', '一頭白髮', '陰森的笑容', '老式的', '堂堂皇皇的', '彎腰駝背的', '華美的', '迷人的', '貓眼狀的', '閃亮的眼睛']
+
+	static traitsSet = ['浪漫', '不友善的', '好色', '冷漠', '傲慢', '無情', '挑剔', '固執', '自負', '心不在焉', '反覆無常', '好鬥', '粗鄙', '虐待狂', '神經質', '過分講究', '揮霍', '強迫', '矯揉造作', '自戀', '猶豫', '吝嗇', '不穩定', '掠奪成性', '魯莽', '悲慘的', '嫉妒的', '無禮的', '武斷的', '快活的', '極端的', '精密計算的', '吹噓的', '殘忍的', '討厭的', '糟糕的', '著迷', '敏感的', '和藹可親的', '有耐心的', '敏銳的', '幽默的', '親切的', '活潑的', '機智的', '有秩序的', '整潔的', '好奇的', '清醒的', '受過教育的', '精確', '即興', '穩定', '有野心', '專制', '嚴厲', '要求多', '真誠', '欺騙', '忠誠', '粗魯', '好爭吵', '尖酸刻薄', '難以寬恕', '粗糙', '不耐煩', '強烈', '殺人的', '瘋狂的', '無憂無慮', '嚴格', '狡猾', '心不在焉', '神祕', '不道德的', '尷尬', '冷靜', '挫折', '親切', '操控他人', '癮君子', '完美主義者', '放鬆', '驕傲', '諷刺', '保守', '緊張', '虛榮', '嗜血', '急躁', '謹慎', '精力充沛', '衝動', '物質主義', '輕浮', '做作', '冷酷', '偏執', '過度情緒', '無情緒'];
+
+
+	static spellsSet = ['1d4+1', '1d6+1d4+2', '3d6+4', '4d6+10'];
+	static SourcesOfPowerSet = [`神話生物
+	與神話生物如深潛者，人面鼠，修格斯，星之吸血鬼等有某種形式的關聯。
+	為了某種形式的服務或犧牲，怪獸保護並幫助教派領袖。`,
+		`文物
+	賦予法術般的能力，防護，攻擊方式或類似的物品(如充當魔法點數或甚至POW點數的存儲裝置)。該文物可能來自地球之外或遠古時代。`,
+		`科技
+	也許來自Xoth (Cthulhu在來到地球前的家)，可能來自另一個維度或另一個世界，這種裝置可能提供法術般效能，存儲魔法點數，可能是魔法武器，或者如盔甲一般提供防護。`,
+		`授予的力量
+	某種形式的「祝福」，由Cthulhu或其僕從植入教派領袖的心靈中。這種力量可能複製相同或降低的法術效果(通常為一半)所消耗的魔法點數或POW。這種力量也可能是另外的形式。
+	某種形式的物理或感官變化：觸手從臉部或身體上生長，某種形式的物理或感官變化：觸手從臉部或身體上生長，鱗狀皮膚護甲，高度的感官等等。`]
+
+
+	static CultWants = [`財富
+	無論是海洋中的金子、金融預測，還是寶貴的古代文物，邪教都相信Cthulhu會賦予某種形式的財富。這可能是對個人或團體具有特定且有幫助的東西。不要低估金錢的力量——它可以驅使人們做出最卑劣的行為。`,
+		`魔法力量
+	了解強大的咒語和儀式。這樣的魔法可能提供寶貴的洞察宇宙（高等學問）的知識，或者可能是控制和/或殺死他人——通過魔法掌控生命的力量。揭示現實祕密是一種令人陶醉且引人入勝的酒，許多人都會希望饗飽其間。或許，獲得魔法力量是達成更大目標的手段。`,
+		`慾望
+	可能意指伴侶關係或身體慾望和欲望。世界上有很多孤獨的人，他們幾乎可以為了與他人建立聯繫而做任何事。有些人沉迷於極致的快感，在邪教中成為會員，可以使他們的行為和慾望合法化。`,
+		`救贖
+	Cthulhu的崛起將帶來前所未有的恐懼和破壞。有些人相信，通過安撫Cthulhu，他們將能夠從這場大災難中幸免於難，他們是那些將在Cthulhu的統治下開創新時代的被選擇者。現在邪教所做的是讓人們購買他們所謂的拯救。`,
+		`權力控制他人
+	控制其他人：個人，一個組織，一個社區，一個城市，一個國家等。使人們順從邪教的意志是其使命的關鍵。也許是通過魔法，洗腦，或是微妙的條件製造。邪教希望人們為他們效力，這可能是為了推動某種計劃，或者只是邪教所認為Cthulhu要求的。
+	`,
+		`宇宙理解
+	真理的追尋者，無論這真理有多驚悚或詛咒。"真理"有時候是主觀的 - 主觀越強，創造一個吸引人的故事就越好。知識就是力量。誰知道深入探索神話之謎會帶來什麼結果。`,
+		`暴力
+	有些人希望看到世界燃燒。這些邪教徒以Cthulhu的名義殺人和傷害人。他們將自己的行為視為最終的自由，放棄道德以在Cthulhu的桌旁獲得一席之地 - 他們相信他們是人類發展的下一階段的先驅。有些人可能使用暴力作為實施更大計劃的手段，而其他人則將其用作掩蓋更可怕真相的幌子。`,
+		`尋找解決方案
+	看似善意的目標，如治療疾病，清除腐敗的權威，理解人類行為 - 這些目標卻被Cthulhu的影響扭曲和腐敗。善意的願望走向了黑暗。`,
+		`惡習上癮
+	為了滿足某種成癮，無論是平凡的(藥物，賭博，權力等)或是源自神話（魔法，知識，變革等）。對某物成癮的人可能更容易被控制——這個邪教想要控制它的成員。`,
+		`愛
+	不要與肉體的親密混淆，愛是大多數人的強大驅動力。一個邪教可能利用對家人，伴侶，或者友情的愛來控制人們。也許愛的目標已經以某種方式扭曲了。也許這個邪教是出於對人類的愛而行動，以非常錯誤的方式試圖「拯救」世界。`]
+	//手指
+	static CultMeans = [
+		`犧牲
+		為了某種目的，教派信徒犧牲活的人類和/或動物。這可能是為了證明他們的忠誠，作為某種力量的來源，或是大計劃的一部分。`,
+		`儀式
+		為了進行一種或多種形式的儀式，需要一小群或大量的參與者。儀式可能完全為教派服務，或者是滿足Cthulhu的意志以完成某事（無論大小）。`,
+		`集結
+		可能是收集知識（神祕學典籍）, 特定的資源，甚至是特定的人。教派必須為了Cthulhu只知的理由收集「某物」。`,
+		`服務
+		通過服務神祕神靈—與Cthulhu有連結的一個， 教派正在滿足Cthulhu的意志。作為回報，教派將以某種方式得到實體的幫助。或者，教派已深陷於此實體之中，必須服從其命令。也許這個實體與Cthulhu沒有實際的連結，但它宣稱有連結只是為了對教派獲得更多的權力。`,
+		`創造
+	這個邪教被命令要建造些什麼。這可能是一個魔法之門，一個神秘的工藝品，一個可以集中巨大力量的地方，或者是一個寺廟。也許它只是創建一個秘密網絡，以便有一天接管一個城鎮，一個城市，一個國家，或者是世界。`,
+		`摧毀
+	邪教被命令去摧毀某物——也許是那些阻礙，激怒，或者傷害Cthulhu的東西。這可能是摧毀一座古老的寺廟，一個神秘的屏障，或者是推翻一個與Cthulhu的目標相牴觸的政府或組織。`,
+		`轉變
+	邪教徒必須進行轉變——無論身體還是心靈。人類的能力有限，無法完成Cthulhu的目標，或者對於即將到來的世界太過脆弱，所以邪教徒尋求將自己轉變成更強大的存在。這可能是人類進化的新階段，或者是與神話同化，就像深海族那樣。`,
+		`追獵並殺死
+	摧毀Cthulhu的敵人，如某些人類的派系或另一個像那些上古之物這樣的神話種族，他們的行為是對抗的。這樣的存在可能成為Cthulhu恐怖計劃的問題。也許在追捕和殺死他們的目標時，邪教會得到些回報：吃掉他們的殺戮能給他們提供神話力量或洞見等等。`]
+}
+
 
 
 const oldArr = [15, 20, 40, 50, 60, 70, 80]
@@ -759,7 +1101,7 @@ const cocManias = [
 	['61) 孤獨恐懼症（Monophobia）：對于一人獨處的恐懼。'],
 	['62) 不潔恐懼症（Mysophobia）：對污垢或污染的恐懼。'],
 	['63) 粘液恐懼症（Myxophobia）：對粘液（史萊姆）的恐懼。'],
-	['64) 尸體恐懼症（Necrophobia）：對尸體的恐懼。'],
+	['64) 屍體恐懼症（Necrophobia）：對屍體的恐懼。'],
 	['65) 數字8恐懼症（Octophobia）：對數字8的恐懼。'],
 	['66) 恐牙症（Odontophobia）：對牙齒的恐懼。'],
 	['67) 恐夢症（Oneirophobia）：對夢境的恐懼。'],
@@ -792,7 +1134,7 @@ const cocManias = [
 	['94) 十三恐懼症（Triskadekaphobia）：對數字13的恐懼症。'],
 	['95) 衣物恐懼症（Vestiphobia）：對衣物的恐懼。'],
 	['96) 女巫恐懼症（Wiccaphobia）：對女巫與巫術的恐懼。'],
-	['97) 黃色恐懼症（Xanthophobia）：對黃色或“黃”字的恐懼。'],
+	['97) 黃色恐懼症（Xanthophobia）：對黃色或「黃」字的恐懼。'],
 	['98) 外語恐懼症（Xenoglossophobia）：對外語的恐懼。'],
 	['99) 异域恐懼症（Xenophobia）：對陌生人或外國人的恐懼。'],
 	['100) 動物恐懼症（Zoophobia）：對動物的恐懼。']
@@ -982,9 +1324,9 @@ function everyTimeDevelopmentPhase(target, text = '') {
 }
 function ccrt() {
 	let result = '';
-	//var rollcc = Math.floor(Math.random() * 10);
-	//var time = Math.floor(Math.random() * 10) + 1;
-	//var PP = Math.floor(Math.random() * 100);
+	//let rollcc = Math.floor(Math.random() * 10);
+	//let time = Math.floor(Math.random() * 10) + 1;
+	//let PP = Math.floor(Math.random() * 100);
 	let rollcc = rollbase.Dice(10) - 1
 	let time = rollbase.Dice(10)
 	let PP = rollbase.Dice(100) - 1
@@ -1104,7 +1446,7 @@ async function coc7({ chack, text = "", userid, groupid, channelid, userName }) 
 	return result;
 }
 
-async function coc7chack({ chack, temp, text = "", userid, groupid, channelid, userName }) {
+async function coc7chack({ chack, temp, text = "", userid, groupid, channelid, userName, bpdiceNum }) {
 	let result = '';
 	let skillPerStyle = "";
 	switch (true) {
@@ -1147,7 +1489,7 @@ async function coc7chack({ chack, temp, text = "", userid, groupid, channelid, u
 			break;
 	}
 	if (text) result += '：' + text;
-	if (userid && groupid && skillPerStyle !== "failure") {
+	if (userid && groupid && skillPerStyle !== "failure" && bpdiceNum <= 0) {
 		await dpRecorder({ userID: userid, groupid, channelid, skillName: text, skillPer: chack, skillPerStyle, skillResult: temp, userName });
 	}
 	return result;
@@ -1178,7 +1520,7 @@ async function coc7bp({ chack, text, userid, groupid, channelid, bpdiceNum, user
 
 			for (let index = 0; index < check.length; index++) {
 				let finallyStr = countStr + ' → ' + await coc7chack(
-					{ chack: check[index], temp: Math.min(...countArr), text: name[index], userid, groupid, channelid, userName }
+					{ chack: check[index], temp: Math.min(...countArr), text: name[index], userid, groupid, channelid, userName, bpdiceNum }
 				);
 				result += '1D100 ≦ ' + check[index] + "　\n" + finallyStr + '\n\n';
 			}
@@ -1187,8 +1529,7 @@ async function coc7bp({ chack, text, userid, groupid, channelid, bpdiceNum, user
 			return result;
 		}
 		if (bpdiceNum < 0) {
-			bpdiceNum = Math.abs(bpdiceNum);
-			for (let i = 0; i <= bpdiceNum; i++) {
+			for (let i = 0; i <= Math.abs(bpdiceNum); i++) {
 				let temp = rollbase.Dice(10);
 				let temp2 = temp.toString() + temp0.toString();
 				if (temp2 > 100) temp2 = parseInt(temp2) - 100;
@@ -1199,14 +1540,14 @@ async function coc7bp({ chack, text, userid, groupid, channelid, bpdiceNum, user
 
 			for (let index = 0; index < check.length; index++) {
 				let finallyStr = countStr + ' → ' + await coc7chack(
-					{ chack: check[index], temp: Math.max(...countArr), text: name[index], userid, groupid, channelid }
+					{ chack: check[index], temp: Math.max(...countArr), text: name[index], userid, groupid, channelid, bpdiceNum }
 				);
 				result += '1D100 ≦ ' + check[index] + "  \n" + finallyStr + '\n\n';
 			}
 			return result;
 		}
 	} catch (error) {
-		console.log('error', error)
+		console.error('error coc #1536', error)
 	}
 }
 function buildpulpchar() {
@@ -1230,175 +1571,9 @@ function buildpulpchar() {
 
 /**
  * COC7傳統創角
- * @param {年齡} text01 
+ * @param {年齡} text
  */
-function build7char(text01) {
-	//讀取年齡
-	if (!text01) {
-		return `沒有填寫歲數, 先使用隨機角色產生功能 .cc7build random
-		以下角色使用「類Quick Fire規則」產生，
-如果希望使用普通擲骰產生屬性，請提供歲數，如 .cc7build 30
-${build7random()}`;
-	} else
-		if (text01.match(/random/i)) {
-			return `${build7random()}`;
-		}
-	let old = "";
-	let ReStr = '調查員年齡設為：';
-	if (text01) old = text01.replace(/\D/g, '');
-	if (old) {
-		ReStr += old + '\n';
-	}
-	//設定 因年齡減少的點數 和 EDU加骰次數
-	let Debuff = 0;
-	let AppDebuff = 0;
-	let EDUinc = 0;
 
-
-	if (old < 7) {
-		ReStr += '\n等等，核心規則或日本拓展沒有適用小於7歲的人物哦。\n先當成15歲處理\n';
-		old = 15;
-	}
-
-	if (old >= 7 && old <= 14) {
-		ReStr += '\n等等，核心規則沒有適用小於15歲的人物哦。\n先使用日本CoC 7th 2020 拓展 - 7到14歲的幼年調查員規則吧\n';
-	}
-	if (old >= 90) {
-		ReStr += '\n等等，核心規則沒有適用於90歲以上的人物哦。\n先當成89歲處理\n';
-		old = 89;
-	}
-	for (let i = 0; old >= oldArr[i]; i++) {
-		Debuff = DebuffArr[i];
-		AppDebuff = AppDebuffArr[i];
-		EDUinc = EDUincArr[i];
-	}
-	ReStr += '==\n';
-	switch (true) {
-		case (old >= 7 && old <= 14):
-			{
-				if (old >= 7 && old <= 12) {
-					ReStr += '\nＳＴＲ：' + rollbase.BuildDiceCal('3d4*5');
-					ReStr += '\nＤＥＸ：' + rollbase.BuildDiceCal('3d6*5');
-					ReStr += '\nＰＯＷ：' + rollbase.BuildDiceCal('3d6*5');
-
-					ReStr += '\nＣＯＮ：' + rollbase.BuildDiceCal('3d4*5');
-					ReStr += '\nＡＰＰ：' + rollbase.BuildDiceCal('3d6*5');
-					ReStr += '\nＳＩＺ：' + rollbase.BuildDiceCal('(2d3+6)*5');
-					ReStr += '\nＩＮＴ：' + rollbase.BuildDiceCal('(2d6+6)*5');
-
-				}
-				if (old >= 13 && old <= 14) {
-					ReStr += '\nＳＴＲ：' + rollbase.BuildDiceCal('(2d6+1)*5');
-					ReStr += '\nＤＥＸ：' + rollbase.BuildDiceCal('3d6*5');
-					ReStr += '\nＰＯＷ：' + rollbase.BuildDiceCal('3d6*5');
-
-					ReStr += '\nＣＯＮ：' + rollbase.BuildDiceCal('(2d6+1)*5');
-					ReStr += '\nＡＰＰ：' + rollbase.BuildDiceCal('3d6*5');
-					ReStr += '\nＳＩＺ：' + rollbase.BuildDiceCal('(2d4+6)*5');
-					ReStr += '\nＩＮＴ：' + rollbase.BuildDiceCal('(2d6+6)*5');
-
-				}
-				for (let i = 0; old >= OldArr2020[i]; i++) {
-					EDUinc = EDUincArr2020[i];
-				}
-				ReStr += '\nＥＤＵ：' + EDUinc;
-				const tempBuildLuck = [rollbase.BuildDiceCal('3d6*5'), rollbase.BuildDiceCal('3d6*5')]
-				const tempLuck = [tempBuildLuck[0].match(/\d+$/), tempBuildLuck[1].match(/\d+$/)]
-				ReStr += '\nＬＵＫ第一次：' + `${tempBuildLuck[0]} \nＬＵＫ第二次： ${tempBuildLuck[1]}`;
-				ReStr += '\nＬＵＫ最終值：' + Math.max(...tempLuck);
-				ReStr += '\n\n幼年調查員的特性：' + rollbase.BuildDiceCal('2d6');
-				ReStr += '\n幼年調查員的家境：' + rollbase.BuildDiceCal('1D100');
-				ReStr += '\n幼年調查員可受「幫忙」的次數：' + Math.round((17 - old) / 3);
-				return ReStr;
-			}
-
-		case (old >= 15 && old <= 19):
-			ReStr += '年齡調整：從STR或SIZ中減去' + Debuff + '點\n（請自行手動選擇計算）。\nEDU減去5點。LUK骰兩次取高。';
-			ReStr += '\n==';
-			ReStr += '\n（以下箭號兩項，減值' + Debuff + '點。）';
-			break;
-		case (old >= 20 && old <= 39):
-			ReStr += '年齡調整：可做' + EDUinc + '次EDU的成長擲骰。';
-			ReStr += '\n==';
-			break;
-		case (old >= 40 && old <= 49):
-			ReStr += '年齡調整：從STR、DEX或CON中減去' + Debuff + '點\n（請自行手動選擇計算）。\nAPP減去' + AppDebuff + '點。進行' + EDUinc + '次EDU的成長擲骰。';
-			ReStr += '\n==';
-			ReStr += '\n（以下箭號三項，自選減去' + Debuff + '點。）';
-			break;
-		case (old >= 50):
-			ReStr += '年齡調整：從STR、DEX或CON中減去' + Debuff + '點\n（從一，二或全部三項中選擇）\n（請自行手動選擇計算）。\nAPP減去' + AppDebuff + '點。進行' + EDUinc + '次EDU的成長擲骰。';
-			ReStr += '\n==';
-			ReStr += '\n（以下箭號三項，自選減去' + Debuff + '點。）';
-			break;
-
-		default:
-			break;
-	}
-	ReStr += '\nＳＴＲ：' + rollbase.BuildDiceCal('3d6*5');
-	if (old >= 40) ReStr += ' ←（可選） ';
-	if (old < 20) ReStr += ' ←（可選）';
-
-	ReStr += '\nＤＥＸ：' + rollbase.BuildDiceCal('3d6*5');
-	if (old >= 40) ReStr += ' ← （可選）';
-
-	ReStr += '\nＰＯＷ：' + rollbase.BuildDiceCal('3d6*5');
-
-	ReStr += '\nＣＯＮ：' + rollbase.BuildDiceCal('3d6*5');
-	if (old >= 40) ReStr += ' ← （可選）'
-
-	if (old >= 40) {
-		ReStr += '\nＡＰＰ：' + rollbase.BuildDiceCal('(3d6*5)-' + AppDebuff)
-	} else ReStr += '\nＡＰＰ：' + rollbase.BuildDiceCal('3d6*5');
-
-
-	ReStr += '\nＳＩＺ：' + rollbase.BuildDiceCal('(2d6+6)*5');
-	if (old < 20) {
-		ReStr += ' ←（可選）';
-	}
-
-	ReStr += '\nＩＮＴ：' + rollbase.BuildDiceCal('(2d6+6)*5');
-
-	if (old < 20) ReStr += '\nＥＤＵ：' + rollbase.BuildDiceCal('((2d6+6)*5)-5');
-	else {
-		let firstEDU = '(' + rollbase.BuildRollDice('2d6') + '+6)*5';
-		ReStr += '\n==';
-		ReStr += '\nＥＤＵ初始值：' + firstEDU + ' = ' + eval(firstEDU);
-
-		let tempEDU = eval(firstEDU);
-
-		for (let i = 1; i <= EDUinc; i++) {
-			let EDURoll = rollbase.Dice(100);
-			ReStr += '\n第' + i + '次EDU成長 → ' + EDURoll;
-			if (EDURoll > tempEDU) {
-				let EDUplus = rollbase.Dice(10);
-				ReStr += ' → 成長' + EDUplus + '點';
-				tempEDU = tempEDU + EDUplus;
-			} else {
-				ReStr += ' → 沒有成長';
-			}
-		}
-		ReStr += '\n';
-		ReStr += '\nＥＤＵ最終值：' + tempEDU;
-	}
-	ReStr += '\n==';
-
-	const tempBuildLuck = [rollbase.BuildDiceCal('3d6*5'), rollbase.BuildDiceCal('3d6*5')]
-	const tempLuck = [tempBuildLuck[0].match(/\d+$/), tempBuildLuck[1].match(/\d+$/)]
-	if (old < 20) {
-		ReStr += '\nＬＵＫ第一次：' + `${tempBuildLuck[0]} \nＬＵＫ第二次： ${tempBuildLuck[1]}`;
-		ReStr += '\nＬＵＫ最終值：' + Math.max(...tempLuck);
-	}
-	else {
-		ReStr += '\nＬＵＫ：' + `${tempBuildLuck[0]} `;
-	}
-
-
-	//ReStr += '\nＬＵＫ：' + rollbase.BuildDiceCal('3d6*5');
-	//if (old < 20) ReStr += '\nＬＵＫ加骰：' + rollbase.BuildDiceCal('3D6*5');
-	ReStr += '\n==\n煤油燈特徵: 1D6&1D20 → ' + rollbase.Dice(6) + ',' + rollbase.Dice(20);
-	return ReStr;
-}
 
 /**
  * COC6傳統創角
@@ -1407,36 +1582,6 @@ ${build7random()}`;
 
 
 function build6char() {
-	/*	//讀取年齡
-		if (text01 == undefined) text01 = 18;
-		let old = text01;
-		let ReStr = '調查員年齡設為：' + old + '\n';
-		//設定 因年齡減少的點數 和 EDU加骰次數
-		let Debuff = 0;
-		let AppDebuff = 0;
-		let EDUinc = 0;
-		let oldArr = [15,20,40,50,60,70,80]
-		let DebuffArr = [5,0,5,10,20,40,80]
-		let AppDebuffArr = [0,0,5,10,15,20,25]
-		let EDUincArr = [0,1,2,3,4,4,4]
-
-		if (old < 15) rply.text = ReStr + '等等，核心規則不允許小於15歲的人物哦。';	
-		if (old >= 90) rply.text = ReStr + '等等，核心規則不允許90歲以上的人物哦。'; 
-
-		for (let i=0 ; old >= oldArr[i] ; i ++){
-			Debuff = DebuffArr[i];
-			AppDebuff = AppDebuffArr[i];
-			EDUinc = EDUincArr[i];
-		}
-		ReStr  += '==\n';
-		if (old < 20) ReStr  += '年齡調整：從STR、SIZ擇一減去' + Debuff + '點\n（請自行手動選擇計算）。\n將EDU減去5點。LUK可擲兩次取高。' ;
-		else
-			if (old >= 40)	ReStr  += '年齡調整：從STR、CON或DEX中「總共」減去' + Debuff + '點\n（請自行手動選擇計算）。\n將APP減去' + AppDebuff +'點。可做' + EDUinc + '次EDU的成長擲骰。' ;
-		else ReStr  += '年齡調整：可做' + EDUinc + '次EDU的成長擲骰。' ;
-		ReStr  += '\n=='; 
-	 if (old>=40) ReStr  += '\n（以下箭號三項，自選共減' + Debuff + '點。）' ;
-		if (old<20) ReStr  += '\n（以下箭號兩項，擇一減去' + Debuff + '點。）' ;
-	 */
 	let ReStr = '六版核心創角：';
 	ReStr += '\nＳＴＲ：' + rollbase.BuildDiceCal('3d6');
 	ReStr += '\nＤＥＸ：' + rollbase.BuildDiceCal('3d6');
@@ -1452,101 +1597,152 @@ function build6char() {
 }
 //隨機產生角色背景
 function PcBG() {
-	return '背景描述生成器（僅供娛樂用，不具實際參考價值）\n==\n調查員是一個' + PersonalDescriptionArr[rollbase.Dice(PersonalDescriptionArr.length) - 1] + '人。\n【信念】：說到這個人，他' + IdeologyBeliefsArr[rollbase.Dice(IdeologyBeliefsArr.length) - 1] + '。\n【重要之人】：對他來說，最重要的人是' + SignificantPeopleArr[rollbase.Dice(SignificantPeopleArr.length) - 1] + '，這個人對他來說之所以重要，是因為' + SignificantPeopleWhyArr[rollbase.Dice(SignificantPeopleWhyArr.length) - 1] + '。\n【意義非凡之地】：對他而言，最重要的地點是' + MeaningfulLocationsArr[rollbase.Dice(MeaningfulLocationsArr.length) - 1] + '。\n【寶貴之物】：他最寶貴的東西就是' + TreasuredPossessionsArr[rollbase.Dice(TreasuredPossessionsArr.length) - 1] + '。\n【特徵】：總括來說，調查員是一個' + TraitsArr[rollbase.Dice(TraitsArr.length) - 1] + '。';
+	return '背景描述生成器（僅供娛樂用，不具實際參考價值）\n=======\n調查員是一個' + PersonalDescriptionArr[rollbase.Dice(PersonalDescriptionArr.length) - 1] + '人。\n【信念】：說到這個人，他' + IdeologyBeliefsArr[rollbase.Dice(IdeologyBeliefsArr.length) - 1] + '。\n【重要之人】：對他來說，最重要的人是' + SignificantPeopleArr[rollbase.Dice(SignificantPeopleArr.length) - 1] + '，這個人對他來說之所以重要，是因為' + SignificantPeopleWhyArr[rollbase.Dice(SignificantPeopleWhyArr.length) - 1] + '。\n【意義非凡之地】：對他而言，最重要的地點是' + MeaningfulLocationsArr[rollbase.Dice(MeaningfulLocationsArr.length) - 1] + '。\n【寶貴之物】：他最寶貴的東西就是' + TreasuredPossessionsArr[rollbase.Dice(TreasuredPossessionsArr.length) - 1] + '。\n【特徵】：總括來說，調查員是一個' + TraitsArr[rollbase.Dice(TraitsArr.length) - 1] + '。';
 }
 
-function sc(mainMsg) {
-	//可接受輸入: .sc 50	.sc 50 哈哈		.sc 50 1/3		.sc 50 1d3+3/1d100 
-	if (!mainMsg || !mainMsg[0] || !mainMsg[1]) return;
-	let san = (mainMsg[1].match(/^\d+$/)) ? mainMsg[1].match(/^\d+$/) : null;
-	if (!san) return;
-
-	let rollDice = rollbase.Dice(100);
-	//scMode 代表會扣SC 或有正常輸入扣SAN的數字 
-	let scMode = (/\//).test(mainMsg[2] || null);
-	let sc = (scMode) ? mainMsg[2] && mainMsg[2].match(/^(.+)\/(.+)$/i) : null;
-	(!sc) ? scMode = false : null;
-
-	let rollFail = sc && sc[2];
-	let rollSuccess = sc && sc[1];
-
-	let lossSan = 0;
-
-	switch (true) {
-		case (rollDice === 100) || (rollDice >= 96 && rollDice <= 100 && san <= 49): {
-			if (!scMode) {
-				return `San Check\n1d100 ≦ ${san}\n擲出:${rollDice} → 大失敗!`;
-			}
-			if (rollFail) {
-				let result = rollFail.replace(/(\d+)d(\d+)/i, replacer)
-				try {
-					lossSan = mathjs.evaluate(result);
-				} catch (error) {
-					lossSan = result;
-				}
-				let nowSan = ((san - lossSan) < 0) ? 0 : san - lossSan;
-				return `San Check\n1d100 ≦ ${san}\n擲出:${rollDice} → 大失敗!\n失去最大值 ${lossSan}點San\n現在San值是${nowSan}點`
-			}
-			return `San Check\n1d100 ≦ ${san}\n擲出:${rollDice} → 大失敗!`
-		}
-		case rollDice <= san:
-			//成功
-			if (!scMode) {
-				return `San Check\n1d100 ≦ ${san}\n擲出:${rollDice} → 成功!`
-			}
-			if (rollSuccess) {
-				try {
-					lossSan = rollbase.BuildDiceCal(rollSuccess).match(/\d+$/);
-				} catch (error) {
-					lossSan = rollSuccess;
-				}
-			}
-			if (!lossSan && rollSuccess) {
-				lossSan = rollSuccess;
-			}
-			if (lossSan) {
-				let nowSan = ((san - lossSan) < 0) ? 0 : san - lossSan;
-				return `San Check\n1d100 ≦ ${san}\n擲出:${rollDice} → 成功!\n失去${lossSan}點San\n現在San值是${nowSan}點`
-			} else
-				return `San Check\n1d100 ≦ ${san}\n擲出:${rollDice} → 成功!\n不需要減少San`
-
-		case rollDice > san: {
-			if (!scMode) {
-				return `San Check\n1d100 ≦ ${san}\n擲出:${rollDice} → 失敗!`
-			}
-			if (rollFail) {
-
-				try {
-					lossSan = rollbase.BuildDiceCal(rollFail)
-				} catch (error) {
-					lossSan = rollFail;
-				}
-			}
-			if (!lossSan && rollFail) {
-				lossSan = rollFail;
-			}
-			if (lossSan) {
-				lossSan = lossSan.match(/\d+$/);
-				let nowSan = ((san - lossSan) < 0) ? 0 : san - lossSan;
-				return `San Check\n1d100 ≦ ${san}\n擲出:${rollDice} → 失敗!\n失去${lossSan}點San\n現在San值是${nowSan}點`
-			} else
-				return `San Check\n1d100 ≦ ${san}\n擲出:${rollDice} → 失敗!\n但不需要減少San`
-
-		}
-		default:
-			return;
+class SanCheck {
+	constructor(mainMsg, botname) {
+		this.mainMsg = mainMsg;
+		this.rollDice = rollbase.Dice(100);
+		this.currentSan = this.getSanity(mainMsg[1]);
+		this.scMode = this.getScMode(mainMsg[2]);
+		this.sc = this.getSc(mainMsg[2]);
+		this.rollSuccess = this.getRollSuccess(this.sc);
+		this.rollFail = this.getRollFail(this.sc);
+		this.lossSan = this.calculateLossSanity(this.rollSuccess, this.rollFail);
+		this.buttonCreate = ["ccrt", "ccsu"];
+		this.botname = botname;
 	}
-}
 
-function replacer(a, b, c) {
-	return b * c;
+	getSanity(mainMsg) {
+		const sanityMatch = mainMsg.match(/^\d+$/);
+		return sanityMatch ? sanityMatch[0] : null;
+	}
+
+	getScMode(mainMsg) {
+		return (/\//).test(mainMsg || null);
+	}
+
+	getSc(mainMsg) {
+		return this.scMode ? mainMsg && mainMsg.match(/^(.+)\/(.+)$/i) : null;
+	}
+
+	getRollSuccess(sc) {
+		return sc && sc[1] ? sc[1].replace(/[^+\-*\dD]/ig, "") : null;
+	}
+
+	getRollFail(sc) {
+		return sc && sc[2] ? sc[2].replace(/[^+\-*\dD]/ig, "") : null;
+	}
+
+	calculateLossSanity(rollSuccess = '', rollFail = '') {
+		const parseRoll = (roll) => {
+			try {
+				return Math.max(rollbase.BuildDiceCal(roll).match(/\S+$/)?.[0], 0)
+			} catch { }
+			try {
+				return Math.max(mathjs.evaluate(roll), 0);
+			} catch { }
+			return roll;
+		};
+
+		const rollSuccessLoss = parseRoll(rollSuccess) || 0;
+		const rollFailLoss = parseRoll(rollFail) || 0;
+
+		let rollFumbleLoss = rollFail;
+		const regExp = /d/ig;
+		try {
+			rollFumbleLoss = mathjs.evaluate(rollFail.replace(regExp, '*'));
+		} catch { }
+
+		return {
+			rollSuccessLoss,
+			rollFailLoss,
+			rollFumbleLoss
+		};
+
+	}
+	runDiscord() {
+		let arr = [];
+		let str = `手動San Check模式 \n 請選擇要擲骰的方式\n  1d100 - 基本San Check\n`;
+		this.scMode = this.getScMode(this.mainMsg[1]);
+		this.sc = this.getSc(this.mainMsg[1]);
+		this.rollSuccess = this.getRollSuccess(this.sc);
+		this.rollFail = this.getRollFail(this.sc);
+		if (this.rollSuccess) {
+			str += ` ${this.rollSuccess} - 成功時San Check\n`;
+			arr.push(this.rollSuccess);
+		}
+		if (this.rollFail) {
+			str += ` ${this.rollFail} - 失敗時San Check\n`;
+			arr.push(this.rollFail);
+		}
+		this.buttonCreate.unshift("1d100",...arr);
+		return str;
+	}
+	run() {
+		if (!this.currentSan && this.botname == "Discord") return this.runDiscord();
+		if (!this.currentSan) return '請輸入正確的San值，\n格式是 .sc 50 或 .sc 50 1/3 或 .sc 50 1d3+3/1d100';
+		const diceFumble = (this.rollDice === 100) || (this.rollDice >= 96 && this.rollDice <= 100 && this.currentSan <= 49);
+		const diceSuccess = this.rollDice <= this.currentSan;
+		const diceFail = this.rollDice > this.currentSan;
+
+		if (diceFumble) {
+			return this.handleDiceFumble();
+		} else if (diceSuccess) {
+			return this.handleDiceSuccess();
+		} else if (diceFail) {
+			return this.handleDiceLoss();
+		}
+
+		//可接受輸入: .sc 50	.sc 50 哈哈		.sc 50 1/3		.sc 50 1d3+3/1d100 
+		//scMode 代表會扣SC 或有正常輸入扣SAN的數字 
+
+	}
+
+	handleDiceFumble() {
+		if (!this.scMode) {
+			return `San Check\n1d100 ≦ ${this.currentSan}\n擲出:${this.rollDice} → 大失敗!`;
+		}
+		if (this.rollFail) {
+			let updatedSan = ((this.currentSan - this.lossSan.rollFumbleLoss) < 0) ? 0 : this.currentSan - this.lossSan.rollFumbleLoss;
+			return `San Check\n1d100 ≦ ${this.currentSan}\n擲出:${this.rollDice} → 大失敗!\n失去${this.rollFail}最大值 ${this.lossSan.rollFumbleLoss}點San\n現在San值是${updatedSan}點`.replace('是NaN點', ' 算式錯誤，未能計算');
+		}
+		return `San Check\n1d100 ≦ ${this.currentSan}\n擲出:${this.rollDice} → 大失敗!`
+	}
+	handleDiceSuccess() {
+		//成功
+		if (!this.scMode) {
+			return `San Check\n1d100 ≦ ${this.currentSan}\n擲出:${this.rollDice} → 成功!`
+		}
+		if (this.lossSan) {
+			let updatedSan = ((this.currentSan - this.lossSan.rollSuccessLoss) < 0) ? 0 : this.currentSan - this.lossSan.rollSuccessLoss;
+			return `San Check\n1d100 ≦ ${this.currentSan}\n擲出:${this.rollDice} → 成功!\n失去${this.rollSuccess} → ${this.lossSan.rollSuccessLoss}點San\n現在San值是${updatedSan}點`.replace('是NaN點', ' 算式錯誤，未能計算');
+		} else
+			return `San Check\n1d100 ≦ ${this.currentSan}\n擲出:${this.rollDice} → 成功!\n不需要減少San`
+
+	}
+	handleDiceLoss() {
+		if (!this.scMode) {
+			return `San Check\n1d100 ≦ ${this.currentSan}\n擲出:${this.rollDice} → 失敗!`
+		}
+		if (this.lossSan) {
+			let updatedSan = ((this.currentSan - this.lossSan.rollFailLoss) < 0) ? 0 : this.currentSan - this.lossSan.rollFailLoss;
+			return `San Check\n1d100 ≦ ${this.currentSan}\n擲出:${this.rollDice} → 失敗!\n失去${this.rollFail} → ${this.lossSan.rollFailLoss}點San\n現在San值是${updatedSan}點`.replace('是NaN點', ' 算式錯誤，未能計算');
+		} else
+			return `San Check\n1d100 ≦ ${this.currentSan}\n擲出:${this.rollDice} → 失敗!\n但不需要減少San`
+
+	}
+	getButton() {
+		return this.buttonCreate;
+	}
 }
 
 function chase() {
 	let rply = `CoC 7ed追逐戰產生器\n`;
 	let round = rollbase.Dice(5) + 5;
 	for (let index = 0; index < round; index++) {
-		rply += `${chaseGenerator(index)}\n----------\n`;
+		rply += `${chaseGenerator(index)}\n========\n`;
 	}
 	return rply;
 }
@@ -1560,7 +1756,7 @@ function chaseGenerator(num) {
 			`
 			let itemsNumber = rollbase.DiceINT(2, 5);
 			let result = shuffle(request);
-			rply += `可能進行檢定: `;
+			rply += `可能進行的檢定: `;
 			for (let index = 0; index < itemsNumber; index++) {
 				rply += `${result[index]} `;
 			}
@@ -1638,7 +1834,7 @@ const blockEasy = [5, 5, 5, 10, 10, 15]
 const blockIntermediate = [5, 5, 10, 10, 15, 15, 25]
 
 function shuffle(array) {
-	var currentIndex = array.length, randomIndex;
+	let currentIndex = array.length, randomIndex;
 
 	// While there remain elements to shuffle...
 	while (currentIndex != 0) {
@@ -1654,145 +1850,7 @@ function shuffle(array) {
 
 	return array;
 }
-function build7random() {
-	/**
-	 * 該方案適合大家想要立刻掏槍上馬開桌的時候。
-	 * 將４０、５０、５０、５０、６０、６０、７０、８０分配在屬性上。
-	 * 選擇職業和８個職業技能
-	 * 將８個職業技能和信譽分別分配以下數額：１項７０％，２項６０％，３項５０％和３項４０％（直接假定這些技能就是這個數值，忽略掉技能初始值）。
-	 * ４個非本職技能，將它們在基礎值上各增加２０％。								
-	 * 
-	 */
-	try {
 
-
-		let old = rollbase.DiceINT(15, 89);
-		let ReStr = `調查員年齡設為：${old}\n`;
-
-		//設定 因年齡減少的點數 和 EDU加骰次數
-		let Debuff = 0;
-		let AppDebuff = 0;
-		let EDUinc = 0;
-
-		for (let i = 0; old >= oldArr[i]; i++) {
-			Debuff = DebuffArr[i];
-			AppDebuff = AppDebuffArr[i];
-			EDUinc = EDUincArr[i];
-		}
-		ReStr += '==\n';
-		switch (true) {
-			case (old >= 15 && old <= 19):
-				ReStr += '年齡調整：從STR或SIZ中減去' + Debuff + '點\n（請自行手動選擇計算）。\nEDU減去5點。LUK骰兩次取高。';
-				ReStr += '\n==';
-				ReStr += '\n（以下箭號兩項，減值' + Debuff + '點。）';
-				break;
-			case (old >= 20 && old <= 39):
-				ReStr += '年齡調整：可做' + EDUinc + '次EDU的成長擲骰。';
-				ReStr += '\n==';
-				break;
-			case (old >= 40 && old <= 49):
-				ReStr += '年齡調整：從STR、DEX或CON中減去' + Debuff + '點\n（請自行手動選擇計算）。\nAPP減去' + AppDebuff + '點。進行' + EDUinc + '次EDU的成長擲骰。';
-				ReStr += '\n==';
-				ReStr += '\n（以下箭號三項，自選減去' + Debuff + '點。）';
-				break;
-			case (old >= 50):
-				ReStr += '年齡調整：從STR、DEX或CON中減去' + Debuff + '點\n（從一，二或全部三項中選擇）\n（請自行手動選擇計算）。\nAPP減去' + AppDebuff + '點。進行' + EDUinc + '次EDU的成長擲骰。';
-				ReStr += '\n==';
-				ReStr += '\n（以下箭號三項，自選減去' + Debuff + '點。）';
-				break;
-
-			default:
-				break;
-		}
-		/**
-		 * 
-		 * ＳＴＲ：(4+6+4) * 5 = 70 ←（可選）
-	ＤＥＸ：(1+6+1) * 5 = 40
-	ＰＯＷ：(2+2+2) * 5 = 30
-	ＣＯＮ：(4+3+6) * 5 = 65
-	ＡＰＰ：(2+1+1) * 5 = 20
-	ＳＩＺ：((3+4)+6) * 5 = 65 ←（可選）
-	ＩＮＴ：((6+2)+6) * 5 = 70
-	ＥＤＵ：(((4+6)+6) * 5)-5 = 75
-		 */
-		let randomState = shuffle(eightState);
-		let randomStateNumber = checkState(randomState);
-		ReStr += '\nＳＴＲ：' + randomStateNumber[0];
-		if (old >= 40) ReStr += ' ←（可選） ';
-		if (old < 20) ReStr += ' ←（可選）';
-
-		ReStr += '\nＤＥＸ：' + randomStateNumber[1];
-		if (old >= 40) ReStr += ' ← （可選）';
-
-		ReStr += '\nＰＯＷ：' + randomStateNumber[2];
-
-		ReStr += '\nＣＯＮ：' + randomStateNumber[3];
-		if (old >= 40) ReStr += ' ← （可選）'
-
-		if (old >= 40) {
-			ReStr += '\nＡＰＰ：' + `${randomStateNumber[4]}-${AppDebuff} = ${randomStateNumber[4] - AppDebuff}`;
-		} else ReStr += '\nＡＰＰ：' + randomStateNumber[4];
-
-
-		ReStr += '\nＳＩＺ：' + randomStateNumber[5];
-		if (old < 20) {
-			ReStr += ' ←（可選）';
-		}
-
-		ReStr += '\nＩＮＴ：' + randomStateNumber[6]
-
-		if (old < 20) ReStr += '\nＥＤＵ：' + randomStateNumber[7];
-		else {
-			ReStr += '\n==';
-			ReStr += '\nＥＤＵ初始值：' + randomStateNumber[7]
-
-			let tempEDU = + randomStateNumber[7]
-
-			for (let i = 1; i <= EDUinc; i++) {
-				let EDURoll = rollbase.Dice(100);
-				ReStr += '\n第' + i + '次EDU成長 → ' + EDURoll;
-				if (EDURoll > tempEDU) {
-					let EDUplus = rollbase.Dice(10);
-					ReStr += ' → 成長' + EDUplus + '點';
-					tempEDU = tempEDU + EDUplus;
-				} else {
-					ReStr += ' → 沒有成長';
-				}
-			}
-			ReStr += '\n';
-			ReStr += '\nＥＤＵ最終值：' + tempEDU;
-		}
-		ReStr += '\n==';
-		const tempBuildLuck = [rollbase.BuildDiceCal('3d6*5'), rollbase.BuildDiceCal('3d6*5')]
-		const tempLuck = [tempBuildLuck[0].match(/\d+$/), tempBuildLuck[1].match(/\d+$/)]
-
-		if (old < 20) {
-			ReStr += '\nＬＵＫ第一次：' + `${tempBuildLuck[0]} \nＬＵＫ第二次： ${tempBuildLuck[1]}`;
-			ReStr += '\nＬＵＫ最終值：' + Math.max(...tempLuck);
-		}
-		else {
-			ReStr += '\nＬＵＫ：' + `${tempBuildLuck[0]} `;
-		}
-
-		//ReStr += '\nＬＵＫ：' + rollbase.BuildDiceCal('3d6*5');
-		//if (old < 20) ReStr += '\nＬＵＫ加骰：' + rollbase.BuildDiceCal('3D6*5');
-		ReStr += `\n==本職技能==`
-		let occAndOtherSkills = getOccupationSkill(randomState);
-		for (let index = 0; index < occAndOtherSkills.finalOSkillList.length; index++) {
-			ReStr += `\n ${occAndOtherSkills.finalOSkillList[index]} ${eightskillsNumber[index]}`
-
-		}
-		ReStr += `\n==其他技能==`
-		for (let index = 0; index < occAndOtherSkills.finalOtherSkillList.length; index++) {
-			ReStr += `\n ${occAndOtherSkills.finalOtherSkillList[index].name} ${occAndOtherSkills.finalOtherSkillList[index].skill + 20}`
-
-		}
-		ReStr += `\n==\n${PcBG()}`;
-		return ReStr;
-	} catch (error) {
-		console.error(error);
-	}
-}
 function getOccupationSkill(state) {
 	//state = [STR,DEX,....]
 	let skillsPool = [];
@@ -1803,7 +1861,7 @@ function getOccupationSkill(state) {
 		for (let index2 = 0; index2 < temp.length; index2++) {
 			skillsPool.push(temp[index2]);
 		}
-		//skillsPool = ["戰鬥類", "醫療"] - 決定POOL有什麼
+		//skillsPool = ["戰鬥類", "醫療"] - 決定POOL有什麼d
 		//skillsPool (15) ['戰鬥類', '醫療', '戰鬥類', '醫療', '移動類', '隱密類', '戰鬥類
 		if (index == CR) {
 			skillResult.push("信譽");
@@ -1961,7 +2019,6 @@ const 調查類 = [
 	{ name: "圖書館使用", skill: 20 },
 	{ name: "估價", skill: 5 },
 	{ name: "讀唇", skill: 1 },
-	{ name: "克蘇魯神話", skill: 0 },
 ]
 
 const 戰鬥類 = [
@@ -1990,3 +2047,522 @@ const APP = ["語言類", "交際類"]
 const EDU = ["調查類", "醫療類", "學問類"]
 const SIZ = ["戰鬥類", "交際類"]
 const INT = ["隱密類", "職業興趣", "調查類"]
+class MythoyCollection {
+	constructor() { }
+
+	static getMythos() {
+		return `克蘇魯神話邪神:
+		${this.getMythonData("god")}
+
+		克蘇魯神話生物:
+		${this.getMythonData("monster")}
+
+		克蘇魯神話書籍:
+		${this.getMythonData("MagicBook")}
+
+		克蘇魯神話法術:
+		${this.getMythonData("magic")}
+		`
+	}
+	static getMythonData(dataType) {
+		return this.cases[dataType] ? this.cases[dataType]() : this.cases._default();
+	}
+	static cases = {
+		god: () => { return this.getRandomData(this.MythoyGodList) },
+		monster: () => { return this.getRandomData(this.mosterList) },
+		magic: () => { return this.getRandomData(this.Magic) },
+		MagicBook: () => { return this.getRandomData(this.MagicBookList) },
+		pushedCasting: () => {
+			return `${this.getRandomData(this.pushedCastingRoll)}
+			對於更強大的法術（例如召喚神靈或消耗POW的法術），副作用可能更嚴重：
+			${this.getRandomData(this.pushedPowerfulCastingRoll)}
+			`
+		},
+		_default: () => { return "沒有找到符合的資料" }
+	}
+	static getRandomData(array) {
+		return array[Math.floor(Math.random() * array.length)];
+	}
+	static mosterList = [
+		"拜亞基", "鑽地魔蟲", "星之彩", "蠕行者", "達貢&海德拉（特殊深潜者）", "黑山羊幼崽", "深潜者", "混種深潜者", "巨噬蠕蟲", "空鬼", "古老者", "炎之精", "飛水螅", "無形眷族", "妖鬼", "食屍鬼", "格拉基之僕", "諾弗·刻", "伊斯之偉大種族", "庭達羅斯的獵犬", "恐怖獵手", "羅伊格爾", "米-戈", "夜魘", "人面鼠", "潜沙怪", "蛇人", "外神僕役", "夏蓋妖蟲", "夏塔克鳥", "修格斯", "修格斯主宰(人型)", "修格斯主宰(修格斯形態)", "克蘇魯的星之眷族", "星之精", "喬喬人", "耶庫伯人", "冷蛛", "昆揚人", "月獸", "空鬼", "潛沙怪", "冷原人", "圖姆哈人"
+	];
+	static MythoyGodList = ["阿布霍斯", "阿特拉克·納克亞", "阿薩托斯", "芭絲特", "昌格納·方庚", "克圖格亞", "偉大的克蘇魯", "賽伊格亞", "道羅斯", "埃霍特", "加塔諾托亞", "格拉基", "哈斯塔，不可名狀者", "伊塔庫亞", "黃衣之王，哈斯塔的化身", "諾登斯", "奈亞拉托提普(人類形態)", "奈亞拉托提普(怪物形態)", "尼約格薩", "蘭-提格斯", "莎布-尼古拉斯", "修德梅爾", "撒托古亞", "圖爾茲查", "烏波·薩斯拉", "烏波·薩斯拉的子嗣", "伊戈羅納克", "伊波·茲特爾", "伊格", "猶格·索托斯", "佐斯·奧摩格"];
+	static Magic = ["維瑞之印", "守衛術", "忘卻之波", "肢體凋萎術", "真言術", "折磨術", "靈魂分配術", "耶德·艾塔德放逐術", "束縛術", "祝福刀鋒術", "葛哥洛斯形體扭曲術", "深淵之息", "黃金蜂蜜酒釀造法", "透特之詠", "記憶模糊術", "紐格塔緊握術", "外貌濫用術", "致盲術/複明術", "創造納克-提特之障壁", "拉萊耶造霧術", "僵屍製造術", "腐爛外皮之詛咒", "致死術", "支配術", "阿撒托斯的恐怖詛咒", "蘇萊曼之塵", "舊印開光術", "綠腐術", "恐懼注入術", "血肉熔解術", "心理暗示術", "精神震爆術", "精神交換術", "精神轉移術", "塔昆·阿提普之鏡", "伊本-加茲之粉", "蒲林的埃及十字架", "修德·梅’爾之赤印", "復活術", "枯萎術", "哈斯塔之歌", "請神術", "聯絡術", "通神術", "附魔術", "迷身術（迷惑犧牲者）", "邪眼術", "猶格-索托斯之拳", "血肉防護術", "時空門法術", "召喚術", "束縛術"];
+	static MagicBookList = ["阿齊夫(死靈之書原版)", "死靈之書", "不可名狀的教團", "拉萊耶文本", "格拉基啟示錄", "死靈之書", "戈爾·尼格拉爾", "伊波恩之書", "水中之喀特", "綠之書", "不可名狀的教團", "伊波恩之書", "來自被詛咒者，或（關於古老而恐怖的教團的論文）", "死亡崇拜", "艾歐德之書", "蠕蟲之秘密", "食屍鬼教團", "伊波恩之書", "埃爾特當陶片", "暗黑儀式", "諾姆羊皮卷", "達爾西第四之書", "斯克洛斯之書", "斷罪處刑之書", "智者瑪格洛魯姆", "暗黑大典", "格哈恩殘篇", "納克特抄本", "不可名狀的教團", "伊希之儀式", "刻萊諾殘篇", "狂僧克利薩努斯的懺悔", "迪詹之書", "達貢禱文", "反思錄", "怪物及其族類", "惡魔崇拜", "深淵棲息者", "鉉子七奧書", "亞洲的神秘奧跡，含有從《戈爾·尼格拉爾》中摘抄的注釋", "巨噬蠕蟲頌", "蓋夫抄本", "薩塞克斯手稿", "鑽地啟示錄", "《死靈之書》中的克蘇魯", "伊拉內克紙草", "卡納瑪戈斯聖約書", "水中之喀特", "海底的教團", "真實的魔法", "納斯編年史", "遠古的恐怖", "骷髏黑書", "伊斯提之歌", "來自被詛咒者", "波納佩聖典", "神秘學基礎", "置身高壓水域", "魔法與黑巫術", "黃衣之王", "黑之契經", "《波納佩聖典》所述的史前太平洋", "伊戈爾倫理學", "來自亞狄斯的幻象", "利誇利亞的傳說", "哈利湖啟示錄", "姆-拉斯紙草", "撒都該人的勝利", "新英格蘭樂土上的奇術異事", "混沌之魂", "猶基亞頌歌", "秘密窺視者", "約翰森的敘述", "致夏蓋的安魂彌撒", "艾歐德之書", "越過幻象", "關於新英格蘭的既往巫術", "阿撒托斯及其他", "黑色的瘋狂之神", "伊波恩生平", "全能的奧蘇姆", "地底掘進者", "巨石的子民", "撒拉遜人的宗教儀式", "水鰭書", "波利尼西亞神話學，附有對克蘇魯傳說圈的記錄", "異界的監視者", "科學的奇跡", "薩波斯的卡巴拉", "贊蘇石板", "魚之書", "失落帝國的遺跡", "托斯卡納的宗教儀式", "夜之魍魎", "太平洋史前史：初步調查", "納卡爾之鑰", "宣福者美多迪烏斯", "翡翠石板", "金枝", "易經", "揭開面紗的伊西斯", "所羅門之鑰", "女巫之錘", "諾查丹瑪斯的預言", "西歐的异教巫術崇拜", "光明篇",]
+
+	static pushedCastingRoll = [
+		'1 .視力模糊或暫時失明。',
+		'2: 殘缺不全的尖叫聲、聲音或其他噪音。',
+		'3: 強烈的風或其他大氣效應。',
+		'4: 流血——可能是由於施法者、在場其他人或環境（如牆壁）的出血。',
+		'5: 奇異的幻象和幻覺。',
+		'6: 周圍的小動物爆炸。',
+		'7: 異臭的硫磺味。',
+		'8: 不小心召喚了神話生物。'
+	]
+	static pushedPowerfulCastingRoll = ['1: 大地震動，牆壁破裂。',
+		'2: 巨大的雷電聲。',
+		'3: 血從天而降。',
+		'4: 施法者的手被乾枯和燒焦。',
+		'5: 施法者不正常地老化（年齡增加2D10歲，並應用特徵修正，請參見老化規則）。',
+		'6: 強大或眾多的神話生物出現，從施法者開始攻擊附近所有人！',
+		'7: 施法者或附近的所有人被吸到遙遠的時間或地方。',
+		'8: 不小心召喚了神話神明。',
+	]
+
+}
+
+
+
+class BuilderRegistry {
+	constructor() {
+		this.builders = new Map();
+	}
+
+	registerBuilder(pattern, builderClass) {
+		this.builders.set(pattern, new builderClass());
+	}
+
+	getBuilder(name) {
+		return this.builders.get(name);
+	}
+}
+
+class Build7Char {
+	constructor() {
+		this.builderRegistry = new BuilderRegistry();
+		this.defaultRegistry;
+	}
+	defaultBuiler(builderClass) {
+		this.defaultRegistry = new builderClass();
+	}
+
+	registerBuilder(name, builderClass) {
+		this.builderRegistry.registerBuilder(name, builderClass);
+	}
+
+	build(text, age) {
+		for (const [pattern, builderClass] of this.builderRegistry.builders) {
+			if (text.match(pattern)) {
+				return builderClass.build(text, age);
+			}
+		}
+
+		return `你輸入的指令不正確，指令為 
+coc7版創角				： 啓動語 .cc7build (歲數7-89)
+coc7版隨機創角			： 啓動語 .cc7build random 或留空
+coc7版自由分配點數創角	： 啓動語 .cc7build .xyz (歲數15-89)
+
+先以coc7版隨機模式來創角
+${this.defaultRegistry.build()}
+`;
+	}
+}
+
+class RandomBuilder {
+	/**
+	 * 該方案適合大家想要立刻掏槍上馬開桌的時候。
+	 * 將４０、５０、５０、５０、６０、６０、７０、８０分配在屬性上。
+	 * 選擇職業和８個職業技能
+	 * 將８個職業技能和信譽分別分配以下數額：１項７０％，２項６０％，３項５０％和３項４０％（直接假定這些技能就是這個數值，忽略掉技能初始值）。
+	 * ４個非本職技能，將它們在基礎值上各增加２０％。								
+	 * 
+	 */
+	constructor() {
+	}
+	static pattern() {
+		return /^random$/i;
+	}
+
+	build() {
+		//設定 因年齡減少的點數 和 EDU加骰次數
+		let old = rollbase.DiceINT(15, 89);
+		let ReStr = `
+=======coc7版隨機創角=======
+調查員年齡設為：${old}\n`;
+		let Debuff = 0;
+		let AppDebuff = 0;
+		let EDUinc = 0;
+		for (let i = 0; old >= oldArr[i]; i++) {
+			Debuff = DebuffArr[i];
+			AppDebuff = AppDebuffArr[i];
+			EDUinc = EDUincArr[i];
+		}
+		ReStr += '=======\n';
+		switch (true) {
+			case (old >= 15 && old <= 19):
+				ReStr += '年齡調整：從STR或SIZ中減去' + Debuff + '點\n（請自行手動選擇計算）。\nEDU減去5點。LUK骰兩次取高。';
+				ReStr += '\n=======';
+				ReStr += '\n（以下箭號兩項，減值' + Debuff + '點。）';
+				break;
+			case (old >= 20 && old <= 39):
+				ReStr += '年齡調整：可做' + EDUinc + '次EDU的成長擲骰。';
+				ReStr += '\n=======';
+				break;
+			case (old >= 40 && old <= 49):
+				ReStr += '年齡調整：從STR、DEX或CON中減去' + Debuff + '點\n（請自行手動選擇計算）。\nAPP減去' + AppDebuff + '點。進行' + EDUinc + '次EDU的成長擲骰。';
+				ReStr += '\n=======';
+				ReStr += '\n（以下箭號三項，自選減去' + Debuff + '點。）';
+				break;
+			case (old >= 50):
+				ReStr += '年齡調整：從STR、DEX或CON中減去' + Debuff + '點\n（從一，二或全部三項中選擇）\n（請自行手動選擇計算）。\nAPP減去' + AppDebuff + '點。進行' + EDUinc + '次EDU的成長擲骰。';
+				ReStr += '\n=======';
+				ReStr += '\n（以下箭號三項，自選減去' + Debuff + '點。）';
+				break;
+
+			default:
+				break;
+		}
+		/**
+		 * 
+		 * ＳＴＲ：(4+6+4) * 5 = 70 ←（可選）
+		ＤＥＸ：(1+6+1) * 5 = 40
+		ＰＯＷ：(2+2+2) * 5 = 30
+		ＣＯＮ：(4+3+6) * 5 = 65
+		ＡＰＰ：(2+1+1) * 5 = 20
+		ＳＩＺ：((3+4)+6) * 5 = 65 ←（可選）
+		ＩＮＴ：((6+2)+6) * 5 = 70
+		ＥＤＵ：(((4+6)+6) * 5)-5 = 75
+		 */
+		let randomState = shuffle(eightState);
+		let randomStateNumber = checkState(randomState);
+		ReStr += '\nＳＴＲ：' + randomStateNumber[0];
+		if (old >= 40) ReStr += ' ←（可選） ';
+		if (old < 20) ReStr += ' ←（可選）';
+
+		ReStr += '\nＤＥＸ：' + randomStateNumber[1];
+		if (old >= 40) ReStr += ' ← （可選）';
+
+		ReStr += '\nＰＯＷ：' + randomStateNumber[2];
+
+		ReStr += '\nＣＯＮ：' + randomStateNumber[3];
+		if (old >= 40) ReStr += ' ← （可選）'
+
+		if (old >= 40) {
+			ReStr += '\nＡＰＰ：' + `${randomStateNumber[4]}-${AppDebuff} = ${randomStateNumber[4] - AppDebuff}`;
+		} else ReStr += '\nＡＰＰ：' + randomStateNumber[4];
+
+
+		ReStr += '\nＳＩＺ：' + randomStateNumber[5];
+		if (old < 20) {
+			ReStr += ' ←（可選）';
+		}
+
+		ReStr += '\nＩＮＴ：' + randomStateNumber[6]
+
+		if (old < 20) ReStr += '\nＥＤＵ：' + randomStateNumber[7];
+		else {
+			ReStr += '\n=======';
+			ReStr += '\nＥＤＵ初始值：' + randomStateNumber[7]
+
+			let tempEDU = + randomStateNumber[7]
+
+			for (let i = 1; i <= EDUinc; i++) {
+				let EDURoll = rollbase.Dice(100);
+				ReStr += '\n第' + i + '次EDU成長 → ' + EDURoll;
+				if (EDURoll > tempEDU) {
+					let EDUplus = rollbase.Dice(10);
+					ReStr += ' → 成長' + EDUplus + '點';
+					tempEDU = tempEDU + EDUplus;
+				} else {
+					ReStr += ' → 沒有成長';
+				}
+			}
+			ReStr += '\n';
+			ReStr += '\nＥＤＵ最終值：' + tempEDU;
+		}
+		ReStr += '\n=======';
+		const tempBuildLuck = [rollbase.BuildDiceCal('3d6*5'), rollbase.BuildDiceCal('3d6*5')]
+		const tempLuck = [tempBuildLuck[0].match(/\d+$/), tempBuildLuck[1].match(/\d+$/)]
+
+		if (old < 20) {
+			ReStr += '\nＬＵＫ第一次：' + `${tempBuildLuck[0]} \nＬＵＫ第二次： ${tempBuildLuck[1]}`;
+			ReStr += '\nＬＵＫ最終值：' + Math.max(...tempLuck);
+		}
+		else {
+			ReStr += '\nＬＵＫ：' + `${tempBuildLuck[0]} `;
+		}
+
+		//ReStr += '\nＬＵＫ：' + rollbase.BuildDiceCal('3d6*5');
+		//if (old < 20) ReStr += '\nＬＵＫ加骰：' + rollbase.BuildDiceCal('3D6*5');
+		ReStr += `\n==本職技能==`
+		let occAndOtherSkills = getOccupationSkill(randomState);
+		for (let index = 0; index < occAndOtherSkills.finalOSkillList.length; index++) {
+			ReStr += `\n ${occAndOtherSkills.finalOSkillList[index]} ${eightskillsNumber[index]}`
+
+		}
+		ReStr += `\n==其他技能==`
+		for (let index = 0; index < occAndOtherSkills.finalOtherSkillList.length; index++) {
+			ReStr += `\n ${occAndOtherSkills.finalOtherSkillList[index].name} ${occAndOtherSkills.finalOtherSkillList[index].skill + 20}`
+
+		}
+		ReStr += `\n=======\n${PcBG()}`;
+		return ReStr;
+	}
+}
+
+class AgeBuilder {
+	static pattern() {
+		return /^\d+$/i;
+	}
+
+	build(text) {
+		let old = "";
+		let ReStr = "調查員年齡設為：";
+		if (text) old = text.replace(/\D/g, '');
+		if (old) {
+			ReStr += old + '\n';
+		}
+		//設定 因年齡減少的點數 和 EDU加骰次數
+		let Debuff = 0;
+		let AppDebuff = 0;
+		let EDUinc = 0;
+		if (old < 7) {
+			ReStr += '\n等等，核心規則或日本拓展沒有適用小於7歲的人物哦。\n先當成15歲處理\n';
+			old = 15;
+		}
+
+		if (old >= 7 && old <= 14) {
+			ReStr += '\n等等，核心規則沒有適用小於15歲的人物哦。\n先使用日本CoC 7th 2020 拓展 - 7到14歲的幼年調查員規則吧\n';
+		}
+		if (old >= 90) {
+			ReStr += '\n等等，核心規則沒有適用於90歲以上的人物哦。\n先當成89歲處理\n';
+			old = 89;
+		}
+		for (let i = 0; old >= oldArr[i]; i++) {
+			Debuff = DebuffArr[i];
+			AppDebuff = AppDebuffArr[i];
+			EDUinc = EDUincArr[i];
+		}
+		ReStr += '=======\n';
+		switch (true) {
+			case (old >= 7 && old <= 14):
+				{
+					if (old >= 7 && old <= 12) {
+						ReStr += '\nＳＴＲ：' + rollbase.BuildDiceCal('3d4*5');
+						ReStr += '\nＤＥＸ：' + rollbase.BuildDiceCal('3d6*5');
+						ReStr += '\nＰＯＷ：' + rollbase.BuildDiceCal('3d6*5');
+
+						ReStr += '\nＣＯＮ：' + rollbase.BuildDiceCal('3d4*5');
+						ReStr += '\nＡＰＰ：' + rollbase.BuildDiceCal('3d6*5');
+						ReStr += '\nＳＩＺ：' + rollbase.BuildDiceCal('(2d3+6)*5');
+						ReStr += '\nＩＮＴ：' + rollbase.BuildDiceCal('(2d6+6)*5');
+
+					}
+					if (old >= 13 && old <= 14) {
+						ReStr += '\nＳＴＲ：' + rollbase.BuildDiceCal('(2d6+1)*5');
+						ReStr += '\nＤＥＸ：' + rollbase.BuildDiceCal('3d6*5');
+						ReStr += '\nＰＯＷ：' + rollbase.BuildDiceCal('3d6*5');
+
+						ReStr += '\nＣＯＮ：' + rollbase.BuildDiceCal('(2d6+1)*5');
+						ReStr += '\nＡＰＰ：' + rollbase.BuildDiceCal('3d6*5');
+						ReStr += '\nＳＩＺ：' + rollbase.BuildDiceCal('(2d4+6)*5');
+						ReStr += '\nＩＮＴ：' + rollbase.BuildDiceCal('(2d6+6)*5');
+
+					}
+					for (let i = 0; old >= OldArr2020[i]; i++) {
+						EDUinc = EDUincArr2020[i];
+					}
+					ReStr += '\nＥＤＵ：' + EDUinc;
+					const tempBuildLuck = [rollbase.BuildDiceCal('3d6*5'), rollbase.BuildDiceCal('3d6*5')]
+					const tempLuck = [tempBuildLuck[0].match(/\d+$/), tempBuildLuck[1].match(/\d+$/)]
+					ReStr += '\nＬＵＫ第一次：' + `${tempBuildLuck[0]} \nＬＵＫ第二次： ${tempBuildLuck[1]}`;
+					ReStr += '\nＬＵＫ最終值：' + Math.max(...tempLuck);
+					ReStr += '\n\n幼年調查員的特性：' + rollbase.BuildDiceCal('2d6');
+					ReStr += '\n幼年調查員的家境：' + rollbase.BuildDiceCal('1D100');
+					ReStr += '\n幼年調查員可受「幫忙」的次數：' + Math.round((17 - old) / 3);
+					return ReStr;
+				}
+
+			case (old >= 15 && old <= 19):
+				ReStr += '年齡調整：從STR或SIZ中減去' + Debuff + '點\n（請自行手動選擇計算）。\nEDU減去5點。LUK骰兩次取高。';
+				ReStr += '\n=======';
+				ReStr += '\n（以下箭號兩項，減值' + Debuff + '點。）';
+				break;
+			case (old >= 20 && old <= 39):
+				ReStr += '年齡調整：可做' + EDUinc + '次EDU的成長擲骰。';
+				ReStr += '\n=======';
+				break;
+			case (old >= 40 && old <= 49):
+				ReStr += '年齡調整：從STR、DEX或CON中減去' + Debuff + '點\n（請自行手動選擇計算）。\nAPP減去' + AppDebuff + '點。進行' + EDUinc + '次EDU的成長擲骰。';
+				ReStr += '\n=======';
+				ReStr += '\n（以下箭號三項，自選減去' + Debuff + '點。）';
+				break;
+			case (old >= 50):
+				ReStr += '年齡調整：從STR、DEX或CON中減去' + Debuff + '點\n（從一，二或全部三項中選擇）\n（請自行手動選擇計算）。\nAPP減去' + AppDebuff + '點。進行' + EDUinc + '次EDU的成長擲骰。';
+				ReStr += '\n=======';
+				ReStr += '\n（以下箭號三項，自選減去' + Debuff + '點。）';
+				break;
+
+			default:
+				break;
+		}
+		ReStr += '\nＳＴＲ：' + rollbase.BuildDiceCal('3d6*5');
+		if (old >= 40) ReStr += ' ←（可選） ';
+		if (old < 20) ReStr += ' ←（可選）';
+
+		ReStr += '\nＤＥＸ：' + rollbase.BuildDiceCal('3d6*5');
+		if (old >= 40) ReStr += ' ← （可選）';
+
+		ReStr += '\nＰＯＷ：' + rollbase.BuildDiceCal('3d6*5');
+
+		ReStr += '\nＣＯＮ：' + rollbase.BuildDiceCal('3d6*5');
+		if (old >= 40) ReStr += ' ← （可選）'
+
+		if (old >= 40) {
+			ReStr += '\nＡＰＰ：' + rollbase.BuildDiceCal('(3d6*5)-' + AppDebuff)
+		} else ReStr += '\nＡＰＰ：' + rollbase.BuildDiceCal('3d6*5');
+
+
+		ReStr += '\nＳＩＺ：' + rollbase.BuildDiceCal('(2d6+6)*5');
+		if (old < 20) {
+			ReStr += ' ←（可選）';
+		}
+
+		ReStr += '\nＩＮＴ：' + rollbase.BuildDiceCal('(2d6+6)*5');
+
+		if (old < 20) ReStr += '\nＥＤＵ：' + rollbase.BuildDiceCal('((2d6+6)*5)-5');
+		else {
+			let firstEDU = '(' + rollbase.BuildRollDice('2d6') + '+6)*5';
+			ReStr += '\n=======';
+			ReStr += '\nＥＤＵ初始值：' + firstEDU + ' = ' + eval(firstEDU);
+
+			let tempEDU = eval(firstEDU);
+
+			for (let i = 1; i <= EDUinc; i++) {
+				let EDURoll = rollbase.Dice(100);
+				ReStr += '\n第' + i + '次EDU成長 → ' + EDURoll;
+				if (EDURoll > tempEDU) {
+					let EDUplus = rollbase.Dice(10);
+					ReStr += ' → 成長' + EDUplus + '點';
+					tempEDU = tempEDU + EDUplus;
+				} else {
+					ReStr += ' → 沒有成長';
+				}
+			}
+			ReStr += '\n';
+			ReStr += '\nＥＤＵ最終值：' + tempEDU;
+		}
+		ReStr += '\n=======';
+
+		const tempBuildLuck = [rollbase.BuildDiceCal('3d6*5'), rollbase.BuildDiceCal('3d6*5')]
+		const tempLuck = [tempBuildLuck[0].match(/\d+$/), tempBuildLuck[1].match(/\d+$/)]
+		if (old < 20) {
+			ReStr += '\nＬＵＫ第一次：' + `${tempBuildLuck[0]} \nＬＵＫ第二次： ${tempBuildLuck[1]}`;
+			ReStr += '\nＬＵＫ最終值：' + Math.max(...tempLuck);
+		}
+		else {
+			ReStr += '\nＬＵＫ：' + `${tempBuildLuck[0]} `;
+		}
+
+
+		//ReStr += '\nＬＵＫ：' + rollbase.BuildDiceCal('3d6*5');
+		//if (old < 20) ReStr += '\nＬＵＫ加骰：' + rollbase.BuildDiceCal('3D6*5');
+		ReStr += '\n=======\n煤油燈特徵: 1D6&1D20 → ' + rollbase.Dice(6) + ',' + rollbase.Dice(20);
+		return ReStr;
+	}
+}
+
+class XYZBuilder {
+	static pattern() {
+		return /^([.])/i;
+	}
+
+	build(text, age) {
+		this.x = (text.match(/[.]\d+/i) && text[1]) || 5;
+		this.y = (text.match(/[.]\d+/i) && text[2]) || 3;
+		this.z = (text.match(/[.]\d+/i) && text[3]) || 0;
+		this.age = age?.match(/^\d+/i) || 0;
+		let ReStr = `自由分配屬性點數創角方案
+=======
+`;
+		for (let i = 0; i < this.x; i++) {
+			ReStr += `${rollbase.BuildDiceCal('3d6*5')}\n`
+		}
+		if (this.x) ReStr += `=======\n`
+		for (let i = 0; i < this.y; i++) {
+			ReStr += `${rollbase.BuildDiceCal('(2d6+6)*5')}\n`
+		}
+		if (this.y) ReStr += `=======\n`
+		for (let i = 0; i < this.z; i++) {
+			ReStr += `${rollbase.BuildDiceCal('3d6*5')}\n`
+		}
+		if (this.z) ReStr += `=======\n`
+		if (this.age && !isNaN(this.age)) {
+			ReStr += `${this.ageAdjustment(this.age)}`
+			//設定 因年齡減少的點數 和 EDU加骰次數
+		} else {
+			ReStr += `沒有年齡調整\n如果在後面加上年齡，就會自動計算年齡調整 如 
+.cc7build .533 40`;
+			const tempBuildLuck = [rollbase.BuildDiceCal('3d6*5'), rollbase.BuildDiceCal('3d6*5')]
+			ReStr += '\n=======\nＬＵＫ：' + `${tempBuildLuck[0]} `;
+		}
+
+
+		return ReStr;
+	}
+	ageAdjustment(age) {
+		let Debuff = 0;
+		let AppDebuff = 0;
+		let EDUinc = 0;
+		let ReStr = '';
+		let newAge = age;
+		if (newAge < 15) newAge = 15;
+		if (newAge > 89) age = 89;
+		for (let i = 0; newAge >= oldArr[i]; i++) {
+			Debuff = DebuffArr[i];
+			AppDebuff = AppDebuffArr[i];
+			EDUinc = EDUincArr[i];
+		}
+		ReStr += '年齡：' + newAge + '\n';
+		switch (true) {
+			case (newAge >= 15 && newAge <= 19):
+				ReStr += '年齡調整：從STR或SIZ中減去' + Debuff + '點\n（請自行手動選擇計算）。\nEDU減去5點。';
+				ReStr += '\n=======';
+				break;
+			case (newAge >= 20 && newAge <= 39):
+				ReStr += '年齡調整：可做' + EDUinc + '次EDU的成長擲骰。';
+				ReStr += '\n=======';
+				break;
+			case (newAge >= 40 && newAge <= 49):
+				ReStr += '年齡調整：從STR、DEX或CON中減去' + Debuff + '點\n（請自行手動選擇計算）。\nAPP減去' + AppDebuff + '點。進行' + EDUinc + '次EDU的成長擲骰。';
+				ReStr += '\n=======';
+				break;
+			case (newAge >= 50):
+				ReStr += '年齡調整：從STR、DEX或CON中減去' + Debuff + '點\n（從一，二或全部三項中選擇）\n（請自行手動選擇計算）。\nAPP減去' + AppDebuff + '點。進行' + EDUinc + '次EDU的成長擲骰。';
+				ReStr += '\n=======';
+				break;
+
+			default:
+				break;
+		}
+		for (let i = 1; i <= EDUinc; i++) {
+			let EDURoll = rollbase.Dice(100);
+			ReStr += '\n第' + i + '次EDU成長 → ' + EDURoll;
+
+			let EDUplus = rollbase.Dice(10);
+			ReStr += ' → 如果高於現有EDU，則成長' + EDUplus + '點';
+		}
+		const tempBuildLuck = [rollbase.BuildDiceCal('3d6*5'), rollbase.BuildDiceCal('3d6*5')]
+		const tempLuck = [tempBuildLuck[0].match(/\d+$/), tempBuildLuck[1].match(/\d+$/)]
+		if (newAge < 20) {
+			ReStr += '\nＬＵＫ第一次：' + `${tempBuildLuck[0]} \nＬＵＫ第二次： ${tempBuildLuck[1]}`;
+			ReStr += '\nＬＵＫ最終值：' + Math.max(...tempLuck);
+		}
+		else {
+			ReStr += '\n=======\nＬＵＫ：' + `${tempBuildLuck[0]} `;
+		}
+		ReStr += '\n=======\n煤油燈特徵: 1D6&1D20 → ' + rollbase.Dice(6) + ',' + rollbase.Dice(20);
+		return ReStr;
+	}
+}
+
+const builder = new Build7Char();
+builder.defaultBuiler(RandomBuilder);
+builder.registerBuilder(RandomBuilder.pattern(), RandomBuilder);
+builder.registerBuilder(XYZBuilder.pattern(), XYZBuilder);
+builder.registerBuilder(AgeBuilder.pattern(), AgeBuilder);
+
+
+
+

@@ -8,7 +8,7 @@ const {
 const variables = {};
 const checkTools = require('../modules/check.js');
 const schema = require('../modules/schema.js');
-const { SlashCommandBuilder } = require('@discordjs/builders');
+const { SlashCommandBuilder } = require('discord.js');
 const gameName = function () {
     return '【BcDice】.bc'
 }
@@ -92,7 +92,7 @@ const rollDiceCommand = async function ({
                 rply.text = await callHelp(doc.trpgId) || '';
                 return rply;
             } else {
-                rply.text = `沒有已設定的骰表ID\n\n` + this.getHelpMessage();
+                rply.text = `沒有已設定的骰表ID\n\n請輸入ID，ID可以在下列網站找到\nhttps://bcdice.org/systems/ \n\n使用例子: .bc use CthulhuTech`;
                 rply.quotes = true;
                 return rply;
             }
@@ -107,12 +107,12 @@ const rollDiceCommand = async function ({
                 return rply;
             }
             if (!mainMsg[2]) {
-                rply.text = `請輸入ID，ID可以在下列網站找到\nhttps://bcdice.org/systems/`
+                rply.text = `請輸入ID，ID可以在下列網站找到\nhttps://bcdice.org/systems/\n\n使用例子: .bc use CthulhuTech`
                 return rply;
             }
             let help = await callHelp(mainMsg[2]);
             if (!help) {
-                rply.text = `此骰表ID沒有回應，請檢查是不是正確\nhttps://bcdice.org/systems/`
+                rply.text = `此骰表ID沒有回應，請檢查是不是正確\nhttps://bcdice.org/systems/\n\n使用例子: .bc use CthulhuTech`
                 return rply;
             }
             let doc = await schema.bcdiceRegedit.findOneAndUpdate(filter, { trpgId: mainMsg[2] }, { upsert: true, returnDocument: 'after', returnNewDocument: true }).catch(err => null)
@@ -185,10 +185,10 @@ const discordCommand = [
                 option.setName('指令')
                     .setDescription('進行bcdice的設定')
                     .setRequired(true)
-                    .addChoice('顯示使用說明', 'help')
-                    .addChoice('顯示BcDice骰組使用說明(登記後可使用)', 'dicehelp')
-                    .addChoice('登記使用的骰表ID', 'use')
-                    .addChoice('移除使用的骰表ID', 'delete'))
+                    .addChoices({ name: '顯示使用說明', value: 'help' },
+                        { name: '顯示BcDice骰組使用說明(登記後可使用)', value: 'dicehelp' },
+                        { name: '登記使用的骰表ID', value: 'use' },
+                        { name: '移除使用的骰表ID', value: 'delete' }))
             .addStringOption(option => option.setName('usetext').setDescription('如登記，請在這裡填寫ID').setRequired(false))
         ,
         async execute(interaction) {
@@ -216,10 +216,15 @@ async function calldice(gameType, message) {
     return (result && result.text) ? result.text : null;
 }
 async function callHelp(gameType) {
-    const loader = new DynamicLoader();
-    const GameSystem = await loader.dynamicLoad(gameType);
-    const result = GameSystem.HELP_MESSAGE || '';
-    return result;
+    try {
+        const loader = new DynamicLoader();
+        const GameSystem = await loader.dynamicLoad(gameType);
+        const result = GameSystem.HELP_MESSAGE || '';
+        return result;
+    } catch (error) {
+        return
+    }
+
 }
 module.exports = {
     rollDiceCommand,

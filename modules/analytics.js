@@ -1,11 +1,17 @@
 "use strict";
 // Load `*.js` under roll directory as properties
 //  i.e., `User.js` will become `exports['User']` or `exports.User`
-(function () {
-	require('fs').readdirSync('./roll/').forEach(function (file) {
-		if (file.match(/\.js$/) !== null && file !== 'index.js' && file !== 'demo.js') {
-			const name = file.replace('.js', '');
-			exports[name] = require('../roll/' + file);
+const fs = require('fs');
+const path = require('path');
+const util = require('util');
+const readdir = util.promisify(fs.readdir);
+
+(async function () {
+	const files = await readdir('./roll/');
+	files.forEach((file) => {
+		const name = path.basename(file, '.js');
+		if ((name !== 'index' || name !== 'demo') && file.endsWith('.js')) {
+			exports[name] = require(path.join(__dirname, '../roll/', file));
 		}
 	})
 }())
@@ -20,7 +26,7 @@ const EXPUP = require('./level').EXPUP || function () { };
 
 //用來呼叫骰組,新增骰組的話,要寫條件式到下面呼叫
 //格式是 exports.骰組檔案名字.function名
-var parseInput = async function ({
+const parseInput = async ({
 	inputStr = "",
 	groupid = null,
 	userid = null,
@@ -34,7 +40,7 @@ var parseInput = async function ({
 	discordMessage,
 	titleName = '',
 	tgDisplayname = ''
-}) {
+}) => {
 	let result = {
 		text: '',
 		type: 'text',
@@ -79,7 +85,7 @@ var parseInput = async function ({
 		})
 
 	} catch (error) {
-		console.error('rolldice GET ERROR:', error.name, ' inputStr: ', inputStr, ' botname: ', botname, ' Time: ', new Date());
+		console.error('rolldice GET ERROR:', error.stack, error.name, ' inputStr: ', inputStr, ' botname: ', botname, ' Time: ', new Date());
 
 	}
 	if (rollDiceResult) {
@@ -147,7 +153,7 @@ var parseInput = async function ({
 
 
 
-var rolldice = async function ({
+const rolldice = async ({
 	inputStr,
 	groupid,
 	userid,
@@ -162,7 +168,7 @@ var rolldice = async function ({
 	discordMessage,
 	titleName,
 	tgDisplayname
-}) {
+}) => {
 	//在下面位置開始分析trigger
 	if (!groupid) {
 		groupid = '';
@@ -182,7 +188,7 @@ var rolldice = async function ({
 	let retext = '';
 	let tempsave = {};
 	for (let index = 0; index < rollTimes; index++) {
-		if (rollTimes > 1 && /^dice/i.test(target.gameType())) {
+		if (rollTimes > 1 && /^dice|^funny/i.test(target.gameType())) {
 			tempsave = await target.rollDiceCommand({
 				inputStr: inputStr,
 				mainMsg: mainMsg,

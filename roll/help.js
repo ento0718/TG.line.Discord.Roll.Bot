@@ -1,35 +1,27 @@
 "use strict";
-
-var Dice = [],
+const fs = require('node:fs');
+const axios = require('axios');
+const Dice = [],
 	Tool = [],
 	admin = [],
 	funny = [],
 	help = [],
 	link = [];
 const start = async () => {
-	await require('fs').readdirSync(__dirname).forEach(async function (file) {
-		try {
-			if (file.match(/\.js$/) !== null && file !== 'index.js' && file !== 'demo.js' && file !== 'help.js') {
-				let tryFile = require('./' + file);
-				if (tryFile.gameType && tryFile.gameType()) {
-					var type = require('./' + file).gameType().replace(/:.*/i, '')
-					var name = file.replace('.js', '');
-					exports[type + '_' + name] = await require('./' + file);
-				}
+	try {
+		const commandFiles = fs.readdirSync('./roll/').filter(file => file.endsWith('.js'));
+		for (const file of commandFiles) {
+			const tryFile = require(`../roll/${file}`);
+			if (tryFile.gameType && tryFile.gameType()) {
+				let type = require('./' + file).gameType().replace(/:.*/i, '')
+				let name = file.replace('.js', '');
+				exports[type + '_' + name] = await require('./' + file);
 			}
 
-		} catch (error) {
-			console.error('help.js error: ', error)
 		}
-	})
-
-	version = "v1." + Object.keys(exports).length + "." + heroku_version.replace(/[v]/, '');
-	if (process.env.HEROKU_RELEASE_CREATED_AT) {
-		version += '\n最後更新時間' + new Date(process.env.HEROKU_RELEASE_CREATED_AT).toLocaleString("en-US", {
-			timeZone: "Asia/Shanghai"
-		}).replace('GMT+0800 (GMT+08:00)', '');
+	} catch (error) {
+		console.error('help.js error: ', error)
 	}
-	ver = 'v1.' + Object.keys(exports).length;
 	for (let name of Object.keys(exports)) {
 		if (name.match(/^DICE/i)) {
 			Dice.push(exports[name])
@@ -52,14 +44,10 @@ const start = async () => {
 	}
 }
 start();
-var variables = {};
+let variables = {};
 //heroku labs:enable runtime-dyno-metadata -a <app name>
 
-var heroku_version = 'v0'
-var ver = '';
-if (process.env.HEROKU_RELEASE_VERSION)
-	heroku_version = process.env.HEROKU_RELEASE_VERSION;
-var version = "";
+
 
 
 const gameName = function () {
@@ -121,7 +109,7 @@ const rollDiceCommand = async function ({
 	switch (true) {
 		case !mainMsg[1]:
 			rply.text =
-				`【HKTRPG擲骰ROLLBOT🤖】
+				`【HKTRPG擲骰ROLLBOT🤖】(${await version.version()})
 HKTRPG是在Discord, Line, Telegram, Whatsapp和網頁上都可以使用的骰子機械人！
 功能：暗骰, 各類TRPG骰子擲骰, 自定義骰子, 頻道經驗值, 占卜, 先攻表, TRPG角色卡, 搜圖,
 翻譯, Discord 聊天紀錄匯出, 數學計算, 隨機抽選, wiki查詢, 資料庫快速查詢功能
@@ -132,7 +120,7 @@ HKTRPG是在Discord, Line, Telegram, Whatsapp和網頁上都可以使用的骰�
 請輸入你想查詢的項目名字.
 或到 (https://bothelp.hktrpg.com/) 觀看詳細使用說明.
 -------
-bothelp ver		- 查詢詳細版本及公告(${ver})
+bothelp ver		- 查詢詳細版本及公告
 bothelp Base	- 查詢trpg 基本擲骰指令🎲
 bothelp Dice	- 查詢trpg 不同系統擲骰指令💻
 bothelp Tool	- 查詢trpg 輔助工具🧰
@@ -149,7 +137,7 @@ bothelp about	- 查詢HKTRPG 歷史📜
 
 			return rply;
 		case /^ver$/i.test(mainMsg[1]):
-			rply.text = `${version}
+			rply.text = `${await version.version()}
 最近更新: 
 2019/07/21 香港克警合作 黑ICON紀念
 ...前略...
@@ -162,6 +150,7 @@ bothelp about	- 查詢HKTRPG 歷史📜
 			return rply;
 		case /^BASE/i.test(mainMsg[1]):
 			rply.text = await getHelpMessage();
+			rply.buttonCreate = ['dr 1d100', '2d6+10 攻擊', '.5 3d6', '.5 4d6dl1', '.rr 5d10!k2']
 			return rply;
 		case /^about$/i.test(mainMsg[1]):
 			rply.text = `關於HKTRPG
@@ -181,8 +170,10 @@ HKTRPG來源自 機器鴨霸獸 https://docs.google.com/document/d/1dYnJqF2_QTp9
 		case /^Dice/i.test(mainMsg[1]):
 			if (mainMsg[1].match(/^DICE$/i)) {
 				rply.text = '輸入 bothelp Dice序號 如bothelp Dice1 即可看到內容\n'
+				rply.buttonCreate = [];
 				for (let num in Dice) {
-					rply.text += num + '. ' + Dice[num].gameName() + '\n';
+					rply.text += num + ": " + Dice[num].gameName() + '\n';
+					rply.buttonCreate.push('bothelp Dice' + num);
 				}
 			}
 			if (mainMsg[1].match(/^Dice\d+$/i)) {
@@ -194,8 +185,10 @@ HKTRPG來源自 機器鴨霸獸 https://docs.google.com/document/d/1dYnJqF2_QTp9
 		case /^Tool/i.test(mainMsg[1]):
 			if (mainMsg[1].match(/^Tool$/i)) {
 				rply.text = '輸入 bothelp Tool序號 如bothelp Tool1 即可看到內容\n'
+				rply.buttonCreate = [];
 				for (let num in Tool) {
-					rply.text += num + '. ' + Tool[num].gameName() + '\n';
+					rply.text += num + ": " + Tool[num].gameName() + '\n';
+					rply.buttonCreate.push('bothelp Tool' + num);
 				}
 			}
 			if (mainMsg[1].match(/^Tool\d+$/i)) {
@@ -210,9 +203,11 @@ HKTRPG來源自 機器鴨霸獸 https://docs.google.com/document/d/1dYnJqF2_QTp9
 		}
 		case /^admin/i.test(mainMsg[1]):
 			if (mainMsg[1].match(/^admin$/i)) {
-				rply.text = '輸入 bothelp admin序號 如bothelp admin1 即可看到內容\n'
+				rply.text = '輸入 bothelp admin序號 如bothelp admin1 即可看到內容\n';
+				rply.buttonCreate = [];
 				for (let num in admin) {
-					rply.text += num + '. ' + admin[num].gameName() + '\n';
+					rply.text += num + ": " + admin[num].gameName() + '\n';
+					rply.buttonCreate.push('bothelp admin' + num);
 				}
 			}
 			if (mainMsg[1].match(/^admin\d+$/i)) {
@@ -224,9 +219,11 @@ HKTRPG來源自 機器鴨霸獸 https://docs.google.com/document/d/1dYnJqF2_QTp9
 
 		case /^funny/i.test(mainMsg[1]):
 			if (mainMsg[1].match(/^funny$/i)) {
-				rply.text = '輸入 bothelp funny序號 如bothelp funny1 即可看到內容\n'
+				rply.text = '輸入 bothelp funny序號 如bothelp funny1 即可看到內容\n';
+				rply.buttonCreate = [];
 				for (let num in funny) {
-					rply.text += num + '. ' + funny[num].gameName() + '\n';
+					rply.text += num + ": " + funny[num].gameName() + '\n';
+					rply.buttonCreate.push('bothelp Funny' + num);
 				}
 			}
 			if (mainMsg[1].match(/^funny\d+$/i)) {
@@ -238,9 +235,11 @@ HKTRPG來源自 機器鴨霸獸 https://docs.google.com/document/d/1dYnJqF2_QTp9
 
 		case /^help/i.test(mainMsg[1]):
 			if (mainMsg[1].match(/^help$/i)) {
-				rply.text = '輸入 bothelp help序號 如bothelp help1 即可看到內容\n'
+				rply.text = '輸入 bothelp help序號 如bothelp help1 即可看到內容\n';
+				rply.buttonCreate = [];
 				for (let num in help) {
-					rply.text += num + '. ' + help[num].gameName() + '\n';
+					rply.text += num + ": " + help[num].gameName() + '\n';
+					rply.buttonCreate.push('bothelp help' + num);
 				}
 			}
 			if (mainMsg[1].match(/^help\d+$/i)) {
@@ -252,7 +251,7 @@ HKTRPG來源自 機器鴨霸獸 https://docs.google.com/document/d/1dYnJqF2_QTp9
 
 		case /^link/i.test(mainMsg[1]):
 			rply.text = `TRPG百科 https://www.hktrpg.com/
-意見留言群 https://support.hktrpg.com
+Discord支援群 https://support.hktrpg.com
 			
 邀請HKTRPG 加入
 Line 邀請連結 http://bit.ly/HKTRPG_LINE
@@ -281,6 +280,41 @@ HKTRPG 研究社 Facebook https://www.facebook.com/groups/HKTRPG
 	}
 }
 
+class Version {
+	constructor() {
+		this.repo = 'hktrpg/TG.line.Discord.Roll.Bot';
+		this.filesCourt = 0;
+		this.pullsNumber = 0;
+		this.lastUpdate = '00000000';
+	}
+	async version() {
+		await this.update();
+		return `v1.${this.filesCourt}.${this.pullsNumber}.${this.lastUpdate}`
+	}
+	async update() {
+		try {
+			const {
+				data
+			} = await axios.get(`https://api.github.com/repos/${this.repo}/pulls?state=closed&sort=updated&direction=desc&per_page=1`);
+			this.pullsNumber = data[0].number;
+			this.lastUpdate = this.YYYYMMDD(data[0].merged_at);
+		} catch (error) {
+			console.log('help #302 version error: ', error)
+		}
+		this.filesCourt = Object.keys(exports).length;
+	}
+	YYYYMMDD(lastUpdateDate) {
+		//2023-08-21T16:19:00Z
+		const date = new Date(lastUpdateDate);
+		const year = date.getFullYear().toString().slice(-2);
+		const month = (date.getMonth() + 1).toString().padStart(2, '0');
+		const day = date.getDate().toString().padStart(2, '0');
+		return `${year}${month}${day}`;
+
+	}
+}
+
+const version = new Version();
 /**
  * if (botname == "Line")
 				rply.text += "\n因為Line的機制, 如擲骰時並無顯示用家名字, 請到下列網址,和機器人任意說一句話,成為好友. \n https://line.me/R/ti/p/svMLqy9Mik\nP.S. Line 修改政策，免費帳號的Line Bot現在有每月500次的私訊限制，超過時DR等私訊功能會失效。(可以認為這功能在Line已失效，半天已400個DR私訊要求)"
@@ -291,7 +325,9 @@ module.exports = {
 	getHelpMessage: getHelpMessage,
 	prefixs: prefixs,
 	gameType: gameType,
-	gameName: gameName
+	gameName: gameName,
+	Version: Version
+
 };
 
 

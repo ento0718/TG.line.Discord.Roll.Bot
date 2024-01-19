@@ -9,19 +9,22 @@ if (process.env.BROADCAST) {
 		console.log('connected To core-www from Whatsapp!')
 		ws.send('connected To core-www from Whatsapp!');
 	});
-	ws.on('message', function incoming(data) {
-		var object = JSON.parse(data);
+	ws.on('message', async function incoming(data) {
+		let object = JSON.parse(data);
 		if (object.botname == 'Whatsapp') {
 			if (!object.message.text) return;
 			console.log('connect To core-www from Whatsapp!')
-			SendToId(object.message.target.id, object.message.text);
+			await SendToId(object.message.target.id, object.message.text);
 			return;
 		}
 	});
 }
+const rollText = require('./getRoll').rollText;
+const candle = require('../modules/candleDays.js');
+const agenda = require('../modules/schedule')
 const qrcode = require('qrcode-terminal');
 const isHeroku = (process.env._ && process.env._.indexOf("heroku")) > 0 ? true : false;
-var TargetGM = (process.env.mongoURL) ? require('../roll/z_DDR_darkRollingToGM').initialize() : '';
+let TargetGM = (process.env.mongoURL) ? require('../roll/z_DDR_darkRollingToGM').initialize() : '';
 const schema = require('../modules/schema');
 const opt = {
 	upsert: true,
@@ -35,16 +38,18 @@ const newMessage = require('./message');
 exports.analytics = require('./analytics');
 exports.z_stop = require('../roll/z_stop');
 const {
-	Client, LocalAuth
+	Client, LocalAuth, MessageMedia
 } = require('whatsapp-web.js');
+const isImageURL = require('image-url-validator').default;
+const imageUrl = (/(http(s?):)([/|.|\w|\s|-])*\.(?:jpg|gif|png)$/i);
 const MESSAGE_SPLITOR = (/\S+/ig);
 // Path where the session data will be stored
 const SESSION_FILE_PATH = './modules/whatsapp-session.json';
 
 // Load the session data if it has been previously saved
-var sessionData;
+let sessionData;
 const maxRetry = 6;
-var retry = 0;
+let retry = 0;
 
 async function startUp() {
 	/**
@@ -183,7 +188,7 @@ if (retry > maxRetry) {
 
 		let target = exports.analytics.findRollList(inputStr.match(MESSAGE_SPLITOR));
 		if (!target && privatemsg == 0) return null;
-		var userid, displayname, channelid, channelKeyword = '';
+		let userid, displayname, channelid, channelKeyword = '';
 		//得到暗骰的數據, GM的位置
 		//是不是自己.ME 訊息
 		//TRUE 即正常
@@ -194,9 +199,8 @@ if (retry > maxRetry) {
 		let TargetGMTempdisplayname = [];
 
 		userid = msg.author;
-		displayname = msg.getContact().then(a => {
-			return a.pushname
-		})
+		let getContact = await msg.getContact();
+		displayname = (getContact && getContact.pushname) || '';
 		let rplyVal = {};
 		if (mainMsg && mainMsg[0])
 			trigger = mainMsg[0].toString().toLowerCase(); // 指定啟動詞在第一個詞&把大階強制轉成細階
@@ -236,7 +240,7 @@ if (retry > maxRetry) {
 		}
 		//LevelUp功能
 		if (groupid && rplyVal && rplyVal.LevelUp) {
-			let text = `@${displayname}${(rplyVal.statue) ? ' ' + rplyVal.statue : ''}
+			let text = `@${displayname}${(rplyVal.statue) ? ' ' + rplyVal.statue : ''}${(candle.checker()) ? ' ' + candle.checker() : ''}
 			${rplyVal.LevelUp}`
 			client.sendMessage(msg.from, text);
 		}
@@ -260,7 +264,7 @@ if (retry > maxRetry) {
 					SendDR(msg, "@" + displayname + '暗骰給自己');
 				}
 				rplyVal.text = "@" + displayname + "的暗骰\n" + rplyVal.text
-				SendToId(userid, rplyVal, client);
+				await SendToId(userid, rplyVal, client);
 				break;
 			case privatemsg == 2:
 				//輸入ddr(指令) 私訊GM及自己
@@ -272,10 +276,10 @@ if (retry > maxRetry) {
 					SendDR(msg, "@" + displayname + '暗骰進行中 \n目標: 自己 ' + targetGMNameTemp);
 				}
 				rplyVal.text = "@" + displayname + " 的暗骰\n" + rplyVal.text;
-				SendToId(msg.from, rplyVal, client);
+				await SendToId(msg.from, rplyVal, client);
 				for (let i = 0; i < TargetGMTempID.length; i++) {
 					if (userid != TargetGMTempID[i])
-						SendToId(TargetGMTempID[i], rplyVal, client);
+						await SendToId(TargetGMTempID[i], rplyVal, client);
 				}
 				break;
 			case privatemsg == 3:
@@ -289,14 +293,14 @@ if (retry > maxRetry) {
 				}
 				rplyVal.text = "@" + displayname + " 的暗骰\n" + rplyVal.text;
 				for (let i = 0; i < TargetGMTempID.length; i++) {
-					SendToId(TargetGMTempID[i], rplyVal, client);
+					await SendToId(TargetGMTempID[i], rplyVal, client);
 				}
 				break;
 			default:
 				if (displaynamecheck == false) {
-					SendToId(msg.from, rplyVal, client);
+					await SendToId(msg.from, rplyVal, client);
 				} else
-					SendToReply(msg, rplyVal);
+					await SendToReply(msg, rplyVal);
 				break;
 		}
 		// msg.delete();
@@ -317,6 +321,47 @@ if (retry > maxRetry) {
 
 
 
+	if (agenda && agenda.agenda) {
+		agenda.agenda.define("scheduleAtMessageWhatsapp", async (job) => {
+			//指定時間一次
+			let data = job.attrs.data;
+			let text = { text: data.replyText };
+			//SendToReply(ctx, text)
+
+			await SendToId(
+				data.groupid, text, client
+			)
+			try {
+				await job.remove();
+			} catch (e) {
+				console.error("TG Error removing job from collection:scheduleAtMessageWhatsapp", e);
+			}
+
+		});
+		agenda.agenda.define("scheduleCronMessageWhatsapp", async (job) => {
+			//指定時間
+			let data = job.attrs.data;
+			let text = { text: data.replyText };
+			//SendToReply(ctx, text)
+			//	await SendToId(msg.from, rplyVal, client);
+			await SendToId(
+				data.groupid, text, client
+			)
+			try {
+				if ((new Date(Date.now()) - data.createAt) >= SIX_MONTH) {
+					await job.remove();
+					await SendToId(
+						data.groupid, { text: "已運行六個月, 移除此定時訊息" }, client
+					)
+				}
+			} catch (e) {
+				console.error("Error removing job from collection:scheduleCronMessageWhatsapp", e);
+			}
+
+		});
+
+	}
+
 
 
 
@@ -324,10 +369,24 @@ if (retry > maxRetry) {
 		return msg.reply(text);
 	}
 
-	function SendToReply(msg, rplyVal) {
+	async function SendToReply(msg, rplyVal) {
 		for (let i = 0; i < rplyVal.text.toString().match(/[\s\S]{1,2000}/g).length; i++) {
 			if (i == 0 || i == 1 || i == rplyVal.text.toString().match(/[\s\S]{1,2000}/g).length - 2 || i == rplyVal.text.toString().match(/[\s\S]{1,2000}/g).length - 1) {
-				msg.reply(rplyVal.text.toString().match(/[\s\S]{1,2000}/g)[i]);
+				const imageMatch = rplyVal.text.toString().match(/[\s\S]{1,2000}/g)[i].match(imageUrl) || null;
+				if (imageMatch && imageMatch.length) {
+					try {
+						let imageVaild = await isImageURL(imageMatch[0]);
+						if (imageVaild) {
+							const media = await MessageMedia.fromUrl(imageMatch[0]);
+							msg.reply(media);
+						}
+					} catch (error) {
+						console.error(error);
+					}
+
+
+				}
+				msg.reply(`${(candle.checker()) ? candle.checker() + ' ' : ''}${rplyVal.text.toString().match(/[\s\S]{1,2000}/g)[i]}`);
 			}
 		}
 	}
@@ -353,10 +412,24 @@ if (retry > maxRetry) {
 }
 startUp()
 
-function SendToId(targetid, rplyVal, client) {
+async function SendToId(targetid, rplyVal, client) {
 	for (let i = 0; i < rplyVal.text.toString().match(/[\s\S]{1,2000}/g).length; i++) {
 		if (i == 0 || i == 1 || i == rplyVal.text.toString().match(/[\s\S]{1,2000}/g).length - 2 || i == rplyVal.text.toString().match(/[\s\S]{1,2000}/g).length - 1) {
+			const imageMatch = rplyVal.text.toString().match(/[\s\S]{1,2000}/g)[i].match(imageUrl) || null;
+			if (imageMatch && imageMatch.length) {
+				try {
+					let imageVaild = await isImageURL(imageMatch[0]);
+					if (imageVaild) {
+						const media = await MessageMedia.fromUrl(imageMatch[0]);
+						client.sendMessage(targetid, media);
+					}
+				} catch (error) {
+					console.error(error)
+				}
+			}
 			client.sendMessage(targetid, rplyVal.text.toString().match(/[\s\S]{1,2000}/g)[i]);
+
+
 		}
 	}
 }

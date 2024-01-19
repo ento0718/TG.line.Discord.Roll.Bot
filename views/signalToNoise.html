@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="zh-tw">
+
+<head>
+    <!-- Required meta tags -->
+    <style>
+        body {
+            touch-action: manipulation;
+        }
+
+        textarea {
+            overflow-y: scroll;
+            resize: none;
+
+            /* Horizontal and vertical scrollbar*/
+            /* Remove this if you want the user to resize the textarea */
+        }
+    </style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1,user-scalable=0" />
+    <meta property="og:title" content="文字轉換器 Signal to Noise @ HKTRPG">
+    <meta property="og:url" content="https://www.hktrpg.com/tool/randomDelete.html">
+    <meta property="og:description" content="Signal to Noise 可用 文字轉換器">
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+        integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous">
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cnchar-all/cnchar.all.min.js"></script>
+
+    <title>文字轉換器 Signal to Noise @ HKTRPG</title>
+    <link rel="icon" href="https://avatars2.githubusercontent.com/u/48795428?s=280&v=4" />
+    <script src="https://code.iconify.design/2/2.0.4/iconify.min.js"></script>
+
+</head>
+
+<body>
+    <div class="container">
+        <div id="header"></div>
+
+        <div class="row">
+            <div class="col-8  h-75">
+                <div class="input-group">
+                    <span class="input-group-text  btn-sm">輸入文字</span>
+                    <textarea class="form-control" aria-label="輸入文字" id="inputText">
+人生若只如初見，何事秋風悲畫扇。
+等閒變卻故人心，卻道故人心易變。
+驪山語罷清宵半，淚雨霖鈴終不怨。
+何如薄倖錦衣郎，比翼連枝當日願。
+
+The way to dusty death. 
+Out, out, brief candle!
+Life's but a walking shadow, a poor player,
+That struts and frets his hour upon the stage</textarea>
+                </div>
+                <div class="col-12">
+                    <div class="input-group">
+                        <textarea class="form-control" aria-label="輸出文字" id="outputText"></textarea>
+                        <button class="btn  btn-primary  btn-sm" type="button" id="button-addon2"
+                            onclick="copyToClipBoard()">複製輸出文字</button>
+                    </div>
+
+                </div>
+                <div class="col-8">
+                    <button class="btn btn-success" type="button" id="inputGroupFileAddon01"
+                        onclick="blockText()">轉換</button>
+                    <button class="btn btn-dark" type="button" id="inputGroupFileAddon03" onclick="reset()">重置</button>
+                    <button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#exampleModal">
+                        <span class="iconify" data-icon="gg:readme" data-inline="false"></span>說明
+                    </button>
+                </div>
+
+            </div>
+            <div class="col-4">
+                <input type="checkbox" class="btn-check" id="btn-check-outlined-A" autocomplete="off">
+                <label class="btn btn-outline-primary" for="btn-check-outlined-A">M > E</label>
+                <input type="checkbox" class="btn-check" id="btn-check-outlined-B" autocomplete="off">
+                <label class="btn btn-outline-primary" for="btn-check-outlined-B">E > R</label>
+                <input type="checkbox" class="btn-check" id="btn-check-outlined-C" autocomplete="off">
+                <label class="btn btn-outline-primary" for="btn-check-outlined-C">C > O</label>
+                <input type="checkbox" class="btn-check" id="btn-check-outlined-D" autocomplete="off">
+                <label class="btn btn-outline-primary" for="btn-check-outlined-D">L > I</label>
+                <input type="checkbox" class="btn-check" id="btn-check-outlined-E" autocomplete="off">
+                <label class="btn btn-outline-primary" for="btn-check-outlined-E">Y > Q</label>
+                <input type="checkbox" class="btn-check" id="btn-check-outlined-F" autocomplete="off">
+                <label class="btn btn-outline-primary" for="btn-check-outlined-F">R > Q</label>
+                <input type="checkbox" class="btn-check" id="btn-check-outlined-G" autocomplete="off">
+                <label class="btn btn-outline-primary" for="btn-check-outlined-G">B > K</label>
+                <input type="checkbox" class="btn-check" id="btn-check-outlined-H" autocomplete="off">
+                <label class="btn btn-outline-primary" for="btn-check-outlined-H">S > B</label>
+
+                <input type="checkbox" class="btn-check" id="btn-check-outlined-I" autocomplete="off">
+                <label class="btn btn-outline-primary" for="btn-check-outlined-I">N > P</label>
+
+                <input type="checkbox" class="btn-check" id="btn-check-outlined-J" autocomplete="off">
+                <label class="btn btn-outline-primary" for="btn-check-outlined-J">I > H</label>
+
+                <input type="checkbox" class="btn-check" id="btn-check-outlined-K" autocomplete="off">
+                <label class="btn btn-outline-primary" for="btn-check-outlined-K">O > F</label>
+
+                <input type="checkbox" class="btn-check" id="btn-check-outlined-L" autocomplete="off">
+                <label class="btn btn-outline-primary" for="btn-check-outlined-L">A > M</label>
+
+                <input type="checkbox" class="btn-check" id="btn-check-outlined-M" autocomplete="off">
+                <label class="btn btn-outline-primary" for="btn-check-outlined-M">T > D</label>
+
+                <div class="alert alert-primary align-items-center"
+                    style="z-index:-100;position: relative; display: none;" id="alertCopied2" role="alert">
+                    <div>
+                        已複製
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        <!-- Modal -->
+        <!-- Modal -->
+        <div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="exampleModalLabel">說明</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        Signal to Noise TRPG專用 文章亂碼產生器<br>
+                        這是一款由2名玩家的在星際間傳送書信TRPG遊戲。<br>
+                        期間兩人的書信會被星際間的雜訊干擾，導致信息出現亂碼<br><br>
+
+                        這個亂碼產生器的原理是自動抽選一些英文字母作為亂碼<br>
+                        附有把中文>拼音>中文的功能<br>
+                        所以如果中文文字的拼音也符合亂碼值<br>
+                        也會被轉換<br>
+                        原規則請參考<a href="https://preview.drivethrurpg.com/en/product/367142/Signal-to-Noise">DriveThruRPG Signal to Noise</a>  <br>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+        <footer>
+            <div id="footer"></div>
+        </footer>
+
+
+    </div>
+
+
+    <!-- Optional JavaScript; choose one of the two! -->
+
+    <!-- Option 1: Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous">
+        </script>
+    <script>
+        let zeroToTwoThree = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        let blockCourt = 0;
+        let start = 0;
+        const A_TO_Z = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M"]
+
+
+        const FIRST = ["M", "E", "C", "L", "Y", "R", "B", "S", "N", "I", "O", "A", "T"]
+        const SECOND = ["E", "R", "O", "I", "Q", "Q", "K", "B", "P", "H", "F", "M", "D"]
+
+        let aToZswitch = [];
+
+
+
+
+
+        window.onload = function () {
+            //   shuffle(zeroToTwoThree);
+            //  plusBlock(1);
+            blockText();
+            resizeTextArea();
+
+        }
+
+
+
+        window.onresize = function (event) {
+            resizeTextArea();
+        };
+
+        function blockText() {
+            /**
+             * 1.讀取Block英文  有沒有點
+             * 
+             * 2.讀取inputText 
+             *      3. 把inputText 的每個字轉成拼音
+             *      4. 每當字符合block 就變成亂破 !@#$%^&*
+             *  5. 把字輸出到Output
+             */
+            let outputTextString = "";
+            getBlock();
+
+
+            const inputTextString = document.getElementById(`inputText`).value;
+
+
+            outputTextString += detactString(inputTextString);
+            document.getElementById(`outputText`).value = outputTextString;
+        }
+
+
+        function plusBlock(number) {
+            blockCourt += number;
+            for (let index = start; index < blockCourt; index++) {
+                let text = A_TO_Z[zeroToTwoThree[index]];
+                document.getElementById(`btn-check-outlined-${text}`).checked = true;
+            }
+            start += number;
+            blockText();
+        }
+
+        function reset() {
+            shuffle(zeroToTwoThree);
+            blockCourt = 0;
+            start = 0;
+            for (let index = 0; index < A_TO_Z.length; index++) {
+                document.getElementById(`btn-check-outlined-${A_TO_Z[index]}`).checked = false;
+            }
+            blockText();
+        }
+
+        function copyToClipBoard() {
+
+            let content = document.getElementById('outputText').value;
+
+            navigator.clipboard.writeText(content).then(function () { }, function (err) {
+                console.error('Async: Could not copy text: ', err);
+            });
+            let elements = document.querySelectorAll('.alert');
+            show(elements);
+            setTimeout(function () {
+                hide(elements);
+            }, 2000);
+
+        }
+
+
+        function hide(elements) {
+            elements = elements.length ? elements : [elements];
+            for (let index = 0; index < elements.length; index++) {
+                elements[index].style.display = 'none';
+            }
+        }
+
+        function show(elements, specifiedDisplay) {
+            elements = elements.length ? elements : [elements];
+            for (let index = 0; index < elements.length; index++) {
+                elements[index].style.display = specifiedDisplay || 'block';
+            }
+        }
+
+        function markBlock() {
+            let block = "["
+            for (let index = 0; index < aToZswitch.length; index++) {
+                if (aToZswitch[index]) {
+                    block += FIRST[index];
+                }
+
+            }
+            block += ']';
+            return block;
+        }
+
+        function detactString(inputString) {
+            let reply = "";
+            //     let block = `[${blockAtoZ}]`;
+            let regex = new RegExp(markBlock(), 'ig');
+            //  console.log('regex', regex)
+            for (let index = 0; index < inputString.length; index++) {
+                let text = getPinyin(inputString[index]);
+                if (text.match(regex)) {
+                    for (let i = 0; i < aToZswitch.length; i++) {
+                        if (text.length > 1) {
+                            text = text.replace(new RegExp(FIRST[i], 'ig'), SECOND[i]);
+                            try {
+                                text = randomError(cnchar.spellToWord(text, 'alltone', 'trad')) || randomError(
+                                    ERROR_TEXT);
+                            } catch (error) {
+                                text = inputString[index]
+                            }
+
+                        } else
+                            if (aToZswitch[i]) {
+                                text = text.replace(FIRST[i], SECOND[i])
+                                text = text.replace(FIRST[i].toLowerCase(), SECOND[i].toLowerCase())
+
+
+                            }
+                    }
+
+                    reply += text;
+
+                } else {
+                    reply += inputString[index]
+                }
+
+
+
+
+
+
+
+                /**
+                if (text.match(regex)) {
+                    reply += randomError();
+                } else reply += inputString[index];
+                */
+            }
+            return reply;
+        }
+        const ERROR_TEXT = ["!", "@", "#", "$", "%", "^", "&", "*", "-", "=", "█", "�", "⊿", "©", ""]
+
+        function randomError(arrayText) {
+            return arrayText[Math.floor(Math.random() * arrayText.length)];
+        }
+
+        function getBlock() {
+            for (let index = 0; index < A_TO_Z.length; index++) {
+                aToZswitch[index] = document.getElementById(`btn-check-outlined-${A_TO_Z[index]}`).checked
+            }
+        }
+
+        function getPinyin(string) {
+            //      console.log('string.spell(', '願'.spell('low'))
+            // console.log('string', string, '倖'.spell('low'))
+            if (string.match(/[a-zA-Z]/)) return string;
+            return (string).spell('low');
+        }
+
+        function resizeTextArea() {
+            const tx = document.getElementsByTagName("textarea");
+            for (let i = 0; i < tx.length; i++) {
+                tx[i].setAttribute("style", "height:" + (screen.height * 0.3) + "px;");
+
+            }
+        }
+
+        function readme() {
+            $('#readmeModalCenter').modal("show")
+        }
+
+        function shuffle(array) {
+            let currentIndex = array.length,
+                randomIndex;
+
+            // While there remain elements to shuffle...
+            while (currentIndex != 0) {
+
+                // Pick a remaining element...
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex--;
+
+                // And swap it with the current element.
+                [array[currentIndex], array[randomIndex]] = [
+                    array[randomIndex], array[currentIndex]
+                ];
+            }
+
+            return array;
+        }
+    </script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"
+        integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"
+        integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN" crossorigin="anonymous">
+        </script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"
+        integrity="sha384-B4gt1jrGC7Jh4AgTPSdUtOBvfO8shuf57BaghqFfPlYxofvL8/KUEfYiJOMMV+rV" crossorigin="anonymous">
+        </script>
+    <script>
+        const TITLE = "文字轉換器 @ Signal to Noise 可用";
+        $(function () {
+            $("#header").load("includes/header.html", function () {
+                $("#title").text(TITLE);
+            });
+            $("#footer").load("includes/footer.html");
+        });
+    </script>
+    <!-- Option 2: Separate Popper and Bootstrap JS -->
+    <!--
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js" integrity="sha384-7+zCNj/IqJ95wo16oMtfsKbZ9ccEh31eOz1HGyDuCQ6wgnyJNSYdrPa03rtR1zdB" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js" integrity="sha384-QJHtvGhmr9XOIpI6YVutG+2QOK9T+ZnN4kzFN1RtK3zEFEIsxhlmWl5/YESvpZ13" crossorigin="anonymous"></script>
+    -->
+
+</body>
+
+</html>

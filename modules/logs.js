@@ -7,7 +7,7 @@ const checkMongodb = require('./dbWatchdog.js');
 //50次 多少條訊息會上傳一次LOG
 const ONE_HOUR = 1 * 60 * 60 * 1000;
 const FIVE_MINUTES = 5 * 60 * 1000;
-var shardid = 0;
+let shardid = 0;
 //每一小時 24 * 60 * 60 * 1000 多久會上傳一次LOG紀錄 
 const RollingLog = {
     LastTimeLog: "",
@@ -50,7 +50,7 @@ const RollingLog = {
 
 
 
-var getState = async function () {
+const getState = async function () {
     let theNewData = await schema.RealTimeRollingLog.findOne({}).catch(error => console.error('log # 52 mongoDB error: ', error.name, error.reson));
     if (!theNewData) return;
     theNewData.RealTimeRollingLogfunction.LogTime = theNewData.RealTimeRollingLogfunction.LogTime.replace(/\s+GMT.*$/, '');

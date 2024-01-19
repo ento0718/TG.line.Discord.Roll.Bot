@@ -1,11 +1,13 @@
 "use strict";
-if (!process.env.LINE_CHANNEL_ACCESSTOKEN || !process.env.mongoURL) {
+if (!process.env.mongoURL) {
     return;
 }
-
+const express = require('express');
+const www = express();
 const {
     RateLimiterMemory
 } = require('rate-limiter-flexible');
+const candle = require('../modules/candleDays.js');
 const MESSAGE_SPLITOR = (/\S+/ig)
 const schema = require('./schema.js');
 const privateKey = (process.env.KEY_PRIKEY) ? process.env.KEY_PRIKEY : null;
@@ -13,12 +15,11 @@ const certificate = (process.env.KEY_CERT) ? process.env.KEY_CERT : null;
 const APIswitch = (process.env.API) ? process.env.API : null;
 const ca = (process.env.KEY_CA) ? process.env.KEY_CA : null;
 const isMaster = (process.env.MASTER) ? process.env.MASTER : null;
-const www = require('./core-Line').app;
 const salt = process.env.SALT;
 const crypto = require('crypto');
 const mainCharacter = require('../roll/z_character').mainCharacter;
 const fs = require('fs');
-var options = {
+let options = {
     key: null,
     cert: null,
     ca: null
@@ -46,25 +47,47 @@ async function read() {
             ca: (fs.readFileSync(ca)) ? fs.readFileSync(ca) : null
         };
     } catch (error) {
-        console.error('error of key')
+        console.error('error of key', error)
     }
 }
 
 (async () => {
     read()
 })();
-var server;
-createWebServer();
+const http = require('http');
+const https = require('https');
+
+
+
 process.on('uncaughtException', (warning) => {
+    console.log('uncaughtException', warning); // Print the warning name
     console.warn(warning.name); // Print the warning name
     console.warn(warning.message); // Print the warning message
-    var clock = setTimeout(createWebServer, 60000 * 5);
+    // const clock = setTimeout(createWebServer, 60000 * 5);
 });
-const io = require('socket.io')(server);
+
 const records = require('./records.js');
-const port = process.env.PORT || 20721;
-var channelKeyword = '';
+const port = process.env.WWWPORT || 20721;
+const channelKeyword = '';
 exports.analytics = require('./analytics');
+
+function createWebServer(options = {}, www) {
+    if (!process.env.CREATEWEB) return;
+    const server = options.key
+        ? https.createServer(options, www)
+        : http.createServer(www);
+
+    const protocol = options.key ? 'https' : 'http';
+    console.log(`${protocol} server`);
+    server.listen(port, () => {
+        console.log("Web Server Started. port:" + port);
+    });
+
+    return server;
+}
+const server = createWebServer(options, www);
+const io = require('socket.io')(server);
+
 
 // 加入線上人數計數
 let onlineCount = 0;
@@ -79,18 +102,19 @@ www.get('/api', async (req, res) => {
         !req || !req.query || !req.query.msg
     ) {
         res.writeHead(200, { 'Content-type': 'application/json' })
-        res.end('{"message":"welcome to HKTRPG API.\\n To use, please enter the content in query: msg \\n like /api?msg=1d100\\n command bothelp for tutorials."}')
+        res.end('{"message":"welcome to HKTRPG API.\\n To use, please enter the content in query: msg \\n like https://api.hktrpg.com?msg=1d100\\n command bothelp for tutorials."}')
         return;
     }
 
-    var ip = req.headers['x-forwarded-for'] ||
+    let ip = req.headers['x-forwarded-for'] ||
         req.socket.remoteAddress ||
         null;
     if (ip && await limitRaterApi(ip)) return;
     let rplyVal = {}
-    var mainMsg = req.query.msg.match(MESSAGE_SPLITOR); // 定義輸入字串
+    let trigger = '';
+    let mainMsg = req.query.msg.match(MESSAGE_SPLITOR); // 定義輸入字串
     if (mainMsg && mainMsg[0])
-        var trigger = mainMsg[0].toString().toLowerCase(); // 指定啟動詞在第一個詞&把大階強制轉成細階
+        trigger = mainMsg[0].toString().toLowerCase(); // 指定啟動詞在第一個詞&把大階強制轉成細階
 
     // 訊息來到後, 會自動跳到analytics.js進行骰組分析
     // 如希望增加修改骰組,只要修改analytics.js的條件式 和ROLL內的骰組檔案即可,然後在HELP.JS 增加說明.
@@ -117,12 +141,27 @@ www.get('/api', async (req, res) => {
 
 });
 
+// 將/publiccard/css/設置為靜態資源的路徑
+www.use('/:path/css/', express.static(process.cwd() + '/views/css/'));
+www.use('/css/', express.static(process.cwd() + '/views/css/'));
+// 將/publiccard/includes/設置為靜態資源的路徑
+www.use('/:path/includes/', express.static(process.cwd() + '/views/includes/'));
+www.use('/:path/scripts/', express.static(process.cwd() + '/views/scripts/'));
+www.use('/includes/', express.static(process.cwd() + '/views/includes/'));
+www.use('/scripts/', express.static(process.cwd() + '/views/scripts/'));
+
+
 www.get('/card', (req, res) => {
     res.sendFile(process.cwd() + '/views/characterCard.html');
 });
 www.get('/publiccard', (req, res) => {
     res.sendFile(process.cwd() + '/views/characterCardPublic.html');
 });
+www.get('/signal', (req, res) => {
+    res.sendFile(process.cwd() + '/views/signalToNoise.html');
+});
+
+
 if (process.env.DISCORD_CHANNEL_SECRET) {
     www.get('/app/discord/:id', (req, res) => {
         if (req.originalUrl.match(/html$/))
@@ -208,7 +247,7 @@ io.on('connection', async (socket) => {
         // 訊息來到後, 會自動跳到analytics.js進行骰組分析
         // 如希望增加修改骰組,只要修改analytics.js的條件式 和ROLL內的骰組檔案即可,然後在HELP.JS 增加說明.
         if (rplyVal && rplyVal.text) {
-            socket.emit('rolling', result.characterReRollName + '：\n' + rplyVal.text)
+            socket.emit('rolling', result.characterReRollName + '：\n' + rplyVal.text + candle.checker())
             if (message.rollTarget && message.rollTarget.id && message.rollTarget.botname && message.userName && message.userPassword && message.cardName) {
                 let filter = {
                     userName: message.userName,
@@ -238,6 +277,27 @@ io.on('connection', async (socket) => {
 
         }
 
+
+    })
+
+    socket.on('removeChannel', async message => {
+        if (await limitRaterCard(socket.handshake.address)) return;
+        //回傳 message 給發送訊息的 Client
+        try {
+            await schema.accountPW.updateOne({
+                "userName": message.userName,
+                "password": SHA(message.userPassword)
+            }, {
+                $pull: {
+                    channel: {
+                        "id": message.channelId,
+                        "botname": message.botname
+                    }
+                }
+            });
+        } catch (e) {
+            console.error('core-www ERROR:', e);
+        }
 
     })
 
@@ -306,7 +366,7 @@ io.on('connection', async (socket) => {
         // 如果 msg 內容鍵值小於 2 等於是訊息傳送不完全
         // 因此我們直接 return ，終止函式執行。
         if (!msg) return;
-        var roomNumber = msg || "公共房間";
+        let roomNumber = msg || "公共房間";
         records.chatRoomGet(roomNumber, (msgs) => {
             socket.emit("chatRecord", msgs);
         });
@@ -328,9 +388,10 @@ records.on("new_message", async (message) => {
 
     io.emit(message.roomNumber, message);
     let rplyVal = {}
-    var mainMsg = message.msg.match(MESSAGE_SPLITOR); // 定義輸入字串
+    let trigger = '';
+    let mainMsg = message.msg.match(MESSAGE_SPLITOR); // 定義輸入字串
     if (mainMsg && mainMsg[0])
-        var trigger = mainMsg[0].toString().toLowerCase(); // 指定啟動詞在第一個詞&把大階強制轉成細階
+        trigger = mainMsg[0].toString().toLowerCase(); // 指定啟動詞在第一個詞&把大階強制轉成細階
 
     // 訊息來到後, 會自動跳到analytics.js進行骰組分析
     // 如希望增加修改骰組,只要修改analytics.js的條件式 和ROLL內的骰組檔案即可,然後在HELP.JS 增加說明.
@@ -352,10 +413,6 @@ records.on("new_message", async (message) => {
         rplyVal.text = '\n' + rplyVal.text
         loadb(io, records, rplyVal, message);
     }
-});
-
-server.listen(port, () => {
-    console.log("Web Server Started. port:" + port);
 });
 
 function SHA(text) {
@@ -418,7 +475,7 @@ async function limitRaterApi(address) {
 /**
  * 
  */
-var sendTo;
+let sendTo;
 if (isMaster) {
     const WebSocket = require('ws');
     //將 express 放進 http 中開啟 Server 的 3000 port ，正確開啟後會在 console 中印出訊息
@@ -447,16 +504,9 @@ if (isMaster) {
     });
 }
 
-function createWebServer() {
-    if (!options.key) {
-        server = require('http').createServer(www);
-        console.log('http server');
-    } else {
-        server = require('https').createServer(options, www);
-        console.log('https server');
-    }
-}
-
 function jsonEscape(str) {
     return str.replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t");
 }
+module.exports = {
+    app: www
+};

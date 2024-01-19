@@ -2,7 +2,7 @@
 if (!process.env.mongoURL) {
     return;
 }
-var save = {};
+let save = {};
 const records = require('../modules/records.js');
 records.get('block', (msgs) => {
     save.save = msgs
@@ -73,7 +73,7 @@ const rollDiceCommand = async function ({
             }
             lv = await VIP.viplevelCheckGroup(groupid);
             limit = FUNCTION_LIMIT[lv];
-            var findVIP = save.save.find(function (item) {
+            let findVIP = save.save.find(function (item) {
                 return item._doc.groupid;
             });
             if (findVIP)
@@ -163,7 +163,7 @@ const rollDiceCommand = async function ({
                     rply.text += '阻擋用關鍵字列表:'
                     for (let a = 0; a < save.save[i].blockfunction.length; a++) {
                         temp = 1
-                        rply.text += ("\n") + a + '. ' + save.save[i].blockfunction[a]
+                        rply.text += ("\n") + a + ": " + save.save[i].blockfunction[a]
                     }
                 }
             }
